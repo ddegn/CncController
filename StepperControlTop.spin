@@ -2,49 +2,9 @@ DAT programName         byte "StepperControlTop", 0
 CON
 {
   ******* Private Notes *******
-  OLED_DriverDemo2140820a is a good starting point in
-  my attempt to modify the code.
-  20a Appears to work correctly.
-  15f OLED and shift registers appear to work.
-  15g Start changing OLED control pins to '595 channels.
-  15g Works with pins but not '595 channels.
-  15k Works with both pins and '595 channels.
-  15l Remove I/O pin redundancy in child object. Still works.
-  15m Start adding SD card support.
-  15n Converted to "CncCommonMethods150415a."
-  15o Remove redundant methods from this the parent object.
-  Change name from "OledDriverDemoScratch150415o" to "StepperControl150416a."
-  16a Works okay. Some overlap of serial output.
-  16b Works with 16i. The "AXES_READOUT_OLED" state appears to work correctly.
-  16c Change the way "AXES_READOUT_OLED" state finds the variables to monitor.
-  The present code requires the variables being monitored to be in a
-  continuous block of memory. Change the pointers to pointers to pointers.
-  17a Start adding ADC code to Spi object.
-  17a So far added code hasn't broken the program.
-  18a The ADC works but using I/O pins on the Prop.
-  18c Abandon 18b.
-  22a The method "Adc3PotsLoop" appears to work correctly but the program freezes
-  once it moves out of this method.
-  I think I need a SPI lock.
-  22c Works well with child 22f.
-  23a Didn't control the DRV8711 chips. Apparently the shared control line with the '165 chips
-  caused interference somehow.
-  25b
-  Register Settings After Setup
-reg #0 = $21
-reg #1 = $3C
-reg #2 = $30
-reg #3 = $80
-reg #4 = $20
-reg #5 = $20
-reg #6 = $00
-reg #7 = $00
-
-  25b Appears to write and read the DRV8711 registers correctly.
-  25c Appears to write and read the DRV8711 registers correctly using shift
-  register control of CS, reset and sleep pins.
-  Change name from "StepperControl150427a" to "StepperControlTop."
+ 
   Move to GitHub.
+  Change the names of the sub programs.
   
 }  
 CON
@@ -114,7 +74,7 @@ OBJ
   'Sd[1]: "SdSmall" 
   Cnc : "CncCommonMethods"
    
-PUB Setup(parameter0, parameter1) | cncCog
+PUB Setup '| cncCog
 
   configPtr := Header.GetConfigName
 
@@ -132,13 +92,13 @@ PUB Setup(parameter0, parameter1) | cncCog
   until result
   Pst.RxFlush
 
-  cncCog := Cnc.Start(spiLock)
+  result := Cnc.Start(spiLock)
 
   adcPtr := Cnc.GetAdcPtr
   buttonMask := 1 << Header#JOYSTICK_BUTTON_165
   
   Pst.str(string(11, 13, "Helper object started on cog #"))
-  Pst.Dec(cncCog)   
+  Pst.Dec(result)   
   Pst.Char(".")   
 
   waitcnt(clkfreq * 2 + cnt)
@@ -687,7 +647,7 @@ PUB HomeMachine
 PUB OpenConfig
 
   Pst.Str(string(11, 13, "OpenConfig Method"))
-  Cnc.PressToContinue
+  'Cnc.PressToContinue
   sdFlag := Cnc.OpenConfig(@programState)
   
   if sdFlag == Header#READ_FILE_SUCCESS
@@ -749,12 +709,12 @@ DAT
 
 cncName                 byte "CNA_0000.TXT", 0  ' Use all caps in file names or SD driver wont find them.
 
-designInput             byte "DI50328A.BIN", 0  
-designReview            byte "DR50407B.BIN", 0
-designExecute           byte "ED50407A.BIN", 0
-manualJoystick          byte "MJ50406E.BIN", 0
-manualNunchuck          byte "MN50407A.BIN", 0
-manualPots              byte "MP50407A.BIN", 0
+designInput             byte "DESIGNIN.BIN", 0  
+designReview            byte "REVIEW_D.BIN", 0
+designExecute           byte "EXECUTE_.BIN", 0
+manualJoystick          byte "JOYSTICK.BIN", 0
+manualNunchuck          byte "NUNCHUCK.BIN", 0
+manualPots              byte "MAN_POTS.BIN", 0
 
 programNames            byte "INIT_MAIN", 0
                         byte "DESIGN_INPUT_MAIN", 0

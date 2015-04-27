@@ -1,6 +1,7 @@
 DAT programName         byte "DESIGNIN", 0
 CON
 {  Design Input
+  This sub program does not do anything useful yet.
 
   ******* Private Notes *******
  
@@ -315,10 +316,17 @@ PUB MainLoop
     case designState
       INIT_DESIGN:
         \MainMenu
-      NEW_DESIGN:
-      PREVIOUS_DESIGN:
+      NEW_DESIGN, PREVIOUS_DESIGN:
+        case designState
+          NEW_DESIGN:
+            Pst.str(string(11, 13, "Start New Design"))
+          PREVIOUS_DESIGN:
+            Pst.str(string(11, 13, "Edit Earlier Design"))
+        Pst.str(string(11, 13, "This option is not yet available."))
+        Pst.str(string(11, 13, "The only option which does anything is the return to top option."))
+        designState := INIT_DESIGN 
+
       RETURN_FROM_DESIGN:
-      Header#DESIGN_INPUT_MAIN:
         ReturnToTop
   
       other:
@@ -390,12 +398,7 @@ PUB MainMenu
     Pst.Newline
     Pst.ClearBelow
     result := Pst.RxCount
-    {if result
-      machineState := MenuInput
-      Pst.str(string(11, 13, "Changing to ", QUOTE))
-      Pst.str(Cnc.FindString(@machineStateTxt, machineState))
-      Pst.str(string(QUOTE, "."))
-      waitcnt(clkfreq * 2 + cnt)  }
+  
     CheckMenu(result)  
   while machineState == Header#INIT_STATE
 
@@ -411,6 +414,7 @@ PUB CheckMenu(tempValue)
     result := Cnc.Get165Value & buttonMask
 
   ifnot result
+    Cnc.InvertOff
     case tempValue
       1, "n", "N": 
         designState := NEW_DESIGN
@@ -420,12 +424,10 @@ PUB CheckMenu(tempValue)
         designState := RETURN_FROM_DESIGN
       other:
         designState := INIT_DESIGN
-    Cnc.InvertOff
+        Cnc.SetOled(Header#AXES_READOUT_OLED, @oledMenu, @oledPtr, oledMenuLimit)
+    
     abort
-{  oledMenu                byte "Highlight&Select", 0
-                        byte "   Start New", 0
-                        byte " Open Previous", 0
-                        byte " Return to Top", 0  }
+
   Cnc.ReadAdc
   result := GetJoystick(Header#JOY_Y_ADC, -Header#DEFAULT_DEADBAND)
   Pst.str(string(11, 13, "result Y ="))               
@@ -511,17 +513,7 @@ PUB GetJoystick(localAxis, scaler)
     Cnc.InvertOff
     abort
          }
-PUB HomeMachine
 
-  Pst.ClearEnd
-  Pst.Newline
-  Pst.Str(@homedText)
-  oledPtr := 0
-  Cnc.SetOled(Header#AXES_READOUT_OLED, @homedText, @oledPtr, 1)
-  homedFlag := Header#HOMED_POSITION
-  longfill(@positionX, 0, 3)
-  waitcnt(clkfreq * 2 + cnt)
-  
 PUB OpenConfig
 
   Pst.Str(string(11, 13, "OpenConfig Method"))

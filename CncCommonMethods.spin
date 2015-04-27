@@ -1326,7 +1326,7 @@ PRI GetDec(sdInstance) | inputCharacter, negativeFlag, startOfNumberFlag
   Pst.str(string(11, 13, "GetDec result = "))
   Pst.Dec(result)
 
-PRI OpenFileToRead(sdInstance, basePtr, fileToOpen)
+PUB OpenFileToRead(sdInstance, basePtr, fileToOpen)
 
   {if fileToOpen < 0
     Pst.str(string(11, 13, "Error in program.  Stopped at OpenFileToRead method."))
@@ -1453,16 +1453,28 @@ PUB OpenConfig(configPtr_)
   }
 PUB ReadData(instance, pointer, size)
 
-  Sd[instance].ReadData(pointer, size)
+  result := Sd[instance].ReadData(pointer, size)
+  
+PUB ReadByte(instance)
+
+  result := Sd[instance].ReadByte
+  
+PUB WriteLong(endDat)
+
+  result := Sd[0].WriteLong(endDat)
   
 PUB WriteData(instance, pointer, size)
 
-  Sd[instance].WriteData(pointer, size)
+  result := Sd[instance].WriteData(pointer, size)
 
 PUB BootPartition(instance, pointer)
 
-  Sd[instance].BootPartition(pointer)
+  result := Sd[instance].BootPartition(pointer)
 
+PUB ListEntries(instance, mode)
+
+  result := Sd[instance].ListEntries(mode)
+  
 PUB Dec(value, localPtr)
 '' Print a decimal number
   result := decl(value, 10, 0, localPtr)
@@ -1583,7 +1595,7 @@ PUB PauseForInput
   Pst.Str(string(11, 13, "Press any key to continue."))
   result := Pst.CharIn
 
-PRI SafeTx(localCharacter)
+PUB SafeTx(localCharacter)
 '' Debug lock should be set prior to calling this method.
 
   if (localCharacter > 32 and localCharacter < 127)
