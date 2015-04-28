@@ -117,7 +117,7 @@ PUB Setup(parameter0, parameter1) | cncCog
 
   waitcnt(clkfreq * 2 + cnt)
 
-  Cnc.PressToContinue
+  'Cnc.PressToContinue
   
   'AdcJoystickLoop
 
@@ -537,8 +537,6 @@ PUB ActiveExecute
 
   executeState := INIT_EXECUTE
   abort
-  
-  
 
 PUB CheckForMatch(localTargetPtr, localNewPtr, preSize, idSize, postSize, idPointer) | multiplier, fileId
 
@@ -555,7 +553,7 @@ PUB CheckForMatch(localTargetPtr, localNewPtr, preSize, idSize, postSize, idPoin
 
   repeat idSize
     multiplier /= 10
-    fileId += (0 #> byte[localNewPtr++] - "0" #> 9) * multiplier
+    fileId += (0 #> byte[localNewPtr++] - "0" <# 9) * multiplier
     
   repeat postSize
     if byte[localTargetPtr++] <> byte[localNewPtr++]
@@ -563,11 +561,12 @@ PUB CheckForMatch(localTargetPtr, localNewPtr, preSize, idSize, postSize, idPoin
     
   long[idPointer] := fileId
 
+  Pst.Str(string(11, 13, "Match Found"))
   Pst.Str(string(11, 13, "long["))
   Pst.Dec(idPointer)
   Pst.Str(string("] = "))
   Pst.Dec(fileId)
-
+  Cnc.PressToContinue           
   result := 1
   
 PUB SelectToExecute(idPointer, size) : doneFlag | localPtr[8], {
@@ -587,7 +586,7 @@ PUB SelectToExecute(idPointer, size) : doneFlag | localPtr[8], {
   
   filesToDisplay := size <# 7
   repeat localIdex from 1 to 7
-    oledPtr[localIdex] := idPointer + (4 * localIdex)
+    oledPtr[localIdex] := idPointer + (4 * (localIdex - 1))
       
   repeat until doneFlag
     result := CheckTerminalInput(Pst.RxCount, filesToDisplay, idPtrOffset)
@@ -619,6 +618,7 @@ PUB SelectToExecute(idPointer, size) : doneFlag | localPtr[8], {
     Pst.str(string(11, 13, "highlightedFile ="))               
     Pst.Dec(highlightedFile)
     Cnc.SetInvert(0, highlightedLine * 8, Header#MAX_OLED_X, (highlightedLine * 8) + 7)
+    Cnc.PressToContinue
     
 PUB CheckTerminalInput(tempValue, filesToDisplay, idPtrOffset) | localIdex
 
@@ -652,7 +652,14 @@ PUB CheckTerminalInput(tempValue, filesToDisplay, idPtrOffset) | localIdex
     case tempValue
       1..7:
         activeFile := fileIdNumber[tempValue + idPtrOffset - 1]
+        Pst.str(string(11, 13, "activeFile = fileIdNumber["))               
+        Pst.Dec(tempValue)
+        Pst.str(string(" + "))               
+        Pst.Dec(idPtrOffset)
+        Pst.str(string(" - 1] = "))           
+        Pst.Dec(activeFile)
         executeState := ACTIVE_EXECUTE
+        Cnc.PressToContinue 
       "+":
         result := 1
         return
