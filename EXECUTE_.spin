@@ -326,7 +326,11 @@ PUB MainLoop
         \MainMenu
       SELECT_TO_EXECUTE:
         \ScanFiles
+        Pst.str(string(11, 13, "Back in MainLoop before SelectToExecute call"))
+        Cnc.PressToContinue
         \SelectToExecute(@fileIdNumber, dataFileCounter)
+        Pst.str(string(11, 13, "Back in MainLoop after SelectToExecute call"))
+        Cnc.PressToContinue
       ACTIVE_EXECUTE:
         \ActiveExecute
       RETURN_FROM_EXECUTE:
@@ -404,7 +408,12 @@ PUB CheckMenu(tempValue)
   else
     tempValue := highlightedLine
     result := Cnc.Get165Value & buttonMask
-
+    Pst.str(string(11, 13, "highlightedLine ="))               
+    Pst.Dec(highlightedLine)
+    Pst.ClearEnd
+    Pst.Newline
+    Cnc.ReadableBin(result, 32)
+    
   ifnot result
     Cnc.InvertOff
     case tempValue
@@ -421,10 +430,10 @@ PUB CheckMenu(tempValue)
     abort
 
   Cnc.ReadAdc
-  result := GetJoystick(Header#JOY_Y_ADC, -Header#DEFAULT_DEADBAND)
+  result := GetJoystick(Header#JOY_Y_ADC, -Header#DEFAULT_DEADBAND * 4)
   Pst.str(string(11, 13, "result Y ="))               
   Pst.Dec(result)
-  result += GetJoystick(Header#JOY_Z_ADC, Header#DEFAULT_DEADBAND)
+  result += GetJoystick(Header#JOY_Z_ADC, Header#DEFAULT_DEADBAND * 4)
   Pst.str(string(11, 13, "result Y + Z ="))               
   Pst.Dec(result)
   if result > 0 and highlightedLine < oledMenuHighlightRange[1]
@@ -525,19 +534,12 @@ PUB ScanFiles | size, characterIndex
     Pst.Str(string(11, 13, "string = "))
     repeat size
       Cnc.SafeTx(byte[result][characterIndex++])
-    Cnc.PressToContinue
+    'Cnc.PressToContinue
     dataFileCounter += CheckForMatch(fileNamePtr, result, Header#PRE_ID_CHARACTERS, {
     } Header#ID_CHARACTERS, Header#POST_ID_CHARACTERS, @fileIdNumber + (4 * dataFileCounter))
     dataFileCounter <#= Header#MAX_DATA_FILES - 1
   while executeState == SELECT_TO_EXECUTE and dataFileCounter < Header#MAX_DATA_FILES
-
-  ActiveExecute
   
-PUB ActiveExecute
-
-  executeState := INIT_EXECUTE
-  abort
-
 PUB CheckForMatch(localTargetPtr, localNewPtr, preSize, idSize, postSize, idPointer) | multiplier, fileId
 
   repeat preSize
@@ -566,7 +568,7 @@ PUB CheckForMatch(localTargetPtr, localNewPtr, preSize, idSize, postSize, idPoin
   Pst.Dec(idPointer)
   Pst.Str(string("] = "))
   Pst.Dec(fileId)
-  Cnc.PressToContinue           
+  'Cnc.PressToContinue           
   result := 1
   
 PUB SelectToExecute(idPointer, size) : doneFlag | localPtr[8], {
@@ -582,19 +584,20 @@ PUB SelectToExecute(idPointer, size) : doneFlag | localPtr[8], {
   Pst.ClearEnd
   Pst.Newline
   Pst.ClearBelow
-
+  Pst.Clear
   
   filesToDisplay := size <# 7
   repeat localIdex from 1 to 7
     oledPtr[localIdex] := idPointer + (4 * (localIdex - 1))
       
-  repeat until doneFlag
+  repeat 'until doneFlag
     result := CheckTerminalInput(Pst.RxCount, filesToDisplay, idPtrOffset)
+    Pst.Home
     Cnc.ReadAdc
-    result := GetJoystick(Header#JOY_Y_ADC, -Header#DEFAULT_DEADBAND)
+    result := GetJoystick(Header#JOY_Y_ADC, -Header#DEFAULT_DEADBAND * 4)
     Pst.str(string(11, 13, "result Y ="))               
     Pst.Dec(result)
-    result += GetJoystick(Header#JOY_Z_ADC, Header#DEFAULT_DEADBAND)
+    result += GetJoystick(Header#JOY_Z_ADC, Header#DEFAULT_DEADBAND * 4)
     Pst.str(string(11, 13, "result Y + Z ="))               
     Pst.Dec(result)
     if result > 0 and highlightedLine < filesToDisplay
@@ -613,12 +616,17 @@ PUB SelectToExecute(idPointer, size) : doneFlag | localPtr[8], {
       Cnc.SetOled(Header#AXES_READOUT_OLED, @selectFileTxt, @oledPtr, filesToDisplay + 1)
      
     highlightedFile := highlightedLine + idPtrOffset 
+    Pst.str(string(11, 13, "idPtrOffset ="))               
+    Pst.Dec(idPtrOffset)
     Pst.str(string(11, 13, "highlightedLine ="))               
     Pst.Dec(highlightedLine)
     Pst.str(string(11, 13, "highlightedFile ="))               
     Pst.Dec(highlightedFile)
+    Pst.ClearEnd
+    Pst.Newline
+    Cnc.ReadableBin(Cnc.Get165Value, 32)
     Cnc.SetInvert(0, highlightedLine * 8, Header#MAX_OLED_X, (highlightedLine * 8) + 7)
-    Cnc.PressToContinue
+    'Cnc.PressToContinue
     
 PUB CheckTerminalInput(tempValue, filesToDisplay, idPtrOffset) | localIdex
 
@@ -627,11 +635,15 @@ PUB CheckTerminalInput(tempValue, filesToDisplay, idPtrOffset) | localIdex
   if tempValue
     tempValue := Pst.CharIn
     
-    if tempValue == "+" or tempValue == "-"
-      result := 0
-    elseif tempValue => "0" and tempValue =< "7"
-      tempValue -= "0"
-      result := 0
+    case tempValue
+      "+", "-":
+        result := 0
+      13:
+        tempValue := highlightedLine
+        result := 0
+      "0".."7":
+        tempValue -= "0"
+        result := 0
   else
     tempValue := highlightedLine
     result := Cnc.Get165Value & buttonMask
@@ -648,7 +660,7 @@ PUB CheckTerminalInput(tempValue, filesToDisplay, idPtrOffset) | localIdex
     Pst.Dec(long[oledPtr[localIdex]])
     
   ifnot result
-    Cnc.InvertOff
+    'Cnc.InvertOff
     case tempValue
       1..7:
         activeFile := fileIdNumber[tempValue + idPtrOffset - 1]
@@ -659,17 +671,36 @@ PUB CheckTerminalInput(tempValue, filesToDisplay, idPtrOffset) | localIdex
         Pst.str(string(" - 1] = "))           
         Pst.Dec(activeFile)
         executeState := ACTIVE_EXECUTE
-        Cnc.PressToContinue 
+        Cnc.PressToContinue
+        Cnc.InvertOff
+        abort
+      {13:
+        activeFile := fileIdNumber[tempValue + idPtrOffset - 1]
+        Pst.str(string(11, 13, "activeFile = fileIdNumber["))               
+        Pst.Dec(tempValue)
+        Pst.str(string(" + "))               
+        Pst.Dec(idPtrOffset)
+        Pst.str(string(" - 1] = "))           
+        Pst.Dec(activeFile)
+        executeState := ACTIVE_EXECUTE
+        Cnc.PressToContinue
+        Cnc.InvertOff
+        abort   }
       "+":
         result := 1
+        Pst.str(string(11, 13, "+ result := 1"))
+        Cnc.PressToContinue
         return
       "-":
         result := -1
+        Pst.str(string(11, 13, "- result := -1"))
+        Cnc.PressToContinue
         return
       other:
         executeState := INIT_EXECUTE
         Cnc.SetOled(Header#AXES_READOUT_OLED, @oledMenu, @oledPtr, oledMenuLimit)
-    abort
+        return 0
+   
 
   result := 0
   
@@ -681,6 +712,17 @@ CON
   MAX_COMMENT_CHARACTERS = 30
   MAX_LIST_SIZE = 30
       
+PUB ActiveExecute
+
+  Pst.Str(string(11, 13, "ActiveExecute Method"))
+  Pst.Str(string(11, 13, "activeFile = "))
+  Pst.Dec(activeFile)
+  Pst.Str(string(11, 13, "Calling InterpreteDesign Method"))
+  InterpreteDesign(activeFile)
+  repeat
+  executeState := INIT_EXECUTE
+  abort
+
 PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, previousExpectedChar
 
   endFlag := 0
@@ -706,14 +748,14 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
   Pst.Char(")")
   Pst.str(string(11, 13, "Opening Design File"))
   
-  Cnc.OpenFileToRead(Header#DESIGN_AXIS, @cncName, fileIndex)
+  Cnc.OpenFileToRead(0, fileNamePtr, fileIndex)
 
-  Pst.str(string(11, 13, "Design file has been opened. Now opening output files."))
+  Pst.str(string(11, 13, "Design file has been opened."))
   
   'Cnc.OpenOutputFilesW(fileIndex)
   
-  Pst.str(string(11, 13, "All output files have been opened."))
-
+  'Pst.str(string(11, 13, "All output files have been opened."))
+  '**** Read file once to get extremes.
   repeat
     result := Cnc.ReadByte(0)
     'filePosition[Header#DESIGN_AXIS]++
@@ -1692,7 +1734,7 @@ PUB DHome
 
 DAT
 
-cncName                 byte "CNA_0000.TXT", 0  ' Use all caps in file names or SD driver wont find them.
+'cncName                 byte "CNA_0000.TXT", 0  ' Use all caps in file names or SD driver wont find them.
 
 
 {programNames            byte "INIT_MAIN", 0
