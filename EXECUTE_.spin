@@ -37,12 +37,14 @@ VAR
   'long sdErrorNumber, sdErrorString, sdTryCount
   'long filePosition[Header#NUMBER_OF_AXES]
   'long globalMultiplier
-  long timer
-  long topX, topY, topZ
+  'long timer
+  'long topX, topY, topZ
   long oledPtr[Header#MAX_OLED_DATA_LINES]
   long adcPtr, buttonMask
-  long configPtr, filePosition[4]
-  long globalMultiplier
+  long configPtr', filePosition[4]
+  long globalMultiplier, fileNamePtr
+  long fileIdNumber[Header#MAX_DATA_FILES]
+  long dataFileCounter, highlightedFile
   
   byte debugLock, spiLock
   'byte tstr[32]
@@ -54,7 +56,7 @@ VAR
   byte commentIndex, newCommentFlag
   byte codeType, codeValue, expectedChar
   byte sdProgramName[Header#MAX_NAME_SIZE + 1]
-  byte downFlag
+  byte downFlag, activeFile
   
 DAT
 
@@ -89,7 +91,7 @@ OBJ
 PUB Setup(parameter0, parameter1) | cncCog
 
   configPtr := Header.GetConfigName
-
+  fileNamePtr := Header.GetFileName
   Pst.Start(115_200)
  
   'cognew(OledDemo, @stack)
@@ -151,7 +153,7 @@ PUB Setup(parameter0, parameter1) | cncCog
 
   'repeat  
   MainLoop
-
+{
 PUB AdcJoystickLoop | localIndex, buttonValue, previousButton, {
 } invertPos[2], invertSize, center[3], deadBand, posSlope[2], sizeSlope, previousJoy[3], {
 } temp, maxPos[2]
@@ -313,7 +315,7 @@ PUB AdcJoystickLoop | localIndex, buttonValue, previousButton, {
   
   Cnc.SetOled(Header#DEMO_OLED, @xyzLabels, @oledPtr, 4) 
   waitcnt(clkfreq * 2 + cnt)
-  
+    }
 PUB MainLoop
 
   repeat
@@ -323,7 +325,8 @@ PUB MainLoop
       INIT_EXECUTE:
         \MainMenu
       SELECT_TO_EXECUTE:
-        \SelectToExecute
+        \ScanFiles
+        \SelectToExecute(@fileIdNumber, dataFileCounter)
       ACTIVE_EXECUTE:
         \ActiveExecute
       RETURN_FROM_EXECUTE:
@@ -372,7 +375,10 @@ PUB MainMenu
   Cnc.SetOled(Header#AXES_READOUT_OLED, @oledMenu, @oledPtr, oledMenuLimit)
   highlightedLine := oledMenuHighlightRange[0]
   Cnc.SetAdcChannels(Header#JOY_Y_ADC, Header#JOY_Z_ADC)
-  
+  Pst.ClearEnd
+  Pst.Newline
+  Pst.ClearBelow
+    
   repeat
     Pst.Home
 
@@ -382,7 +388,7 @@ PUB MainMenu
     Pst.str(string(11, 13, "Press ", QUOTE, "r", QUOTE, " to Return to top menu.")) 
     Pst.ClearEnd
     Pst.Newline
-    Pst.ClearBelow
+    'Pst.ClearBelow
     result := Pst.RxCount
   
     CheckMenu(result)  
@@ -402,11 +408,11 @@ PUB CheckMenu(tempValue)
   ifnot result
     Cnc.InvertOff
     case tempValue
-      1, "n", "N": 
+      1, "s", "N": 
         executeState := SELECT_TO_EXECUTE
-      2, "o", "O":
-        executeState := ACTIVE_EXECUTE
-      3, "r", "R":
+      '2, "o", "O":
+      '  executeState := ACTIVE_EXECUTE
+      2, "r", "R":
         executeState := RETURN_FROM_EXECUTE
       other:
         executeState := INIT_EXECUTE
@@ -500,12 +506,17 @@ PUB GetJoystick(localAxis, scaler)
     abort
          }
 
-PUB SelectToExecute | size
+PUB ScanFiles | size, characterIndex
+
+  dataFileCounter := 0
 
   Pst.Str(string(11, 13, "SelectToExecute Method"))
   repeat
-    
+    characterIndex := 0
     result := Cnc.ListEntries(0, "N")
+    ifnot result
+      'executeState := INIT_EXECUTE
+      return
     Pst.Str(string(11, 13, "result = "))
     Pst.Dec(result)
     size := strsize(result) <# MAX_LIST_SIZE
@@ -513,13 +524,147 @@ PUB SelectToExecute | size
     Pst.Dec(size)
     Pst.Str(string(11, 13, "string = "))
     repeat size
-      Cnc.SafeTx(byte[result])
-  while executeState == SELECT_TO_EXECUTE
+      Cnc.SafeTx(byte[result][characterIndex++])
+    Cnc.PressToContinue
+    dataFileCounter += CheckForMatch(fileNamePtr, result, Header#PRE_ID_CHARACTERS, {
+    } Header#ID_CHARACTERS, Header#POST_ID_CHARACTERS, @fileIdNumber + (4 * dataFileCounter))
+    dataFileCounter <#= Header#MAX_DATA_FILES - 1
+  while executeState == SELECT_TO_EXECUTE and dataFileCounter < Header#MAX_DATA_FILES
+
+  ActiveExecute
   
 PUB ActiveExecute
 
   executeState := INIT_EXECUTE
   abort
+  
+  
+
+PUB CheckForMatch(localTargetPtr, localNewPtr, preSize, idSize, postSize, idPointer) | multiplier, fileId
+
+  repeat preSize
+    if byte[localTargetPtr++] <> byte[localNewPtr++]
+      return 0
+      
+  localTargetPtr += idSize
+
+  multiplier := 1
+  fileId := 0
+  repeat idSize
+    multiplier *= 10
+
+  repeat idSize
+    multiplier /= 10
+    fileId += (0 #> byte[localNewPtr++] - "0" #> 9) * multiplier
+    
+  repeat postSize
+    if byte[localTargetPtr++] <> byte[localNewPtr++]
+      return 0
+    
+  long[idPointer] := fileId
+
+  Pst.Str(string(11, 13, "long["))
+  Pst.Dec(idPointer)
+  Pst.Str(string("] = "))
+  Pst.Dec(fileId)
+
+  result := 1
+  
+PUB SelectToExecute(idPointer, size) : doneFlag | localPtr[8], {
+} filesToDisplay, idPtrOffset, maxOffset, localIdex', terminalChange
+
+  oledPtr[0] := 0
+  filesToDisplay := size <# 7
+  idPtrOffset := 0
+  maxOffset :=  0 #> (size - filesToDisplay)
+  Cnc.SetOled(Header#AXES_READOUT_OLED, @selectFileTxt, @oledPtr, filesToDisplay + 1)
+  highlightedLine := 1
+  Cnc.SetAdcChannels(Header#JOY_Y_ADC, Header#JOY_Z_ADC)
+  Pst.ClearEnd
+  Pst.Newline
+  Pst.ClearBelow
+
+  
+  filesToDisplay := size <# 7
+  repeat localIdex from 1 to 7
+    oledPtr[localIdex] := idPointer + (4 * localIdex)
+      
+  repeat until doneFlag
+    result := CheckTerminalInput(Pst.RxCount, filesToDisplay, idPtrOffset)
+    Cnc.ReadAdc
+    result := GetJoystick(Header#JOY_Y_ADC, -Header#DEFAULT_DEADBAND)
+    Pst.str(string(11, 13, "result Y ="))               
+    Pst.Dec(result)
+    result += GetJoystick(Header#JOY_Z_ADC, Header#DEFAULT_DEADBAND)
+    Pst.str(string(11, 13, "result Y + Z ="))               
+    Pst.Dec(result)
+    if result > 0 and highlightedLine < filesToDisplay
+      highlightedLine++
+    elseif result > 0 and highlightedLine == 7 and idPtrOffset < maxOffset
+      idPtrOffset++
+      repeat localIdex from 1 to 7
+        oledPtr[localIdex] := idPointer + (4 * idPtrOffset) + (4 * localIdex)
+      Cnc.SetOled(Header#AXES_READOUT_OLED, @selectFileTxt, @oledPtr, filesToDisplay + 1)
+    elseif result < 0 and highlightedLine > 1
+      highlightedLine--
+    elseif result < 0 and highlightedLine == 1 and idPtrOffset > 0
+      idPtrOffset--
+      repeat localIdex from 1 to 7
+        oledPtr[localIdex] := idPointer + (4 * idPtrOffset) + (4 * localIdex)
+      Cnc.SetOled(Header#AXES_READOUT_OLED, @selectFileTxt, @oledPtr, filesToDisplay + 1)
+     
+    highlightedFile := highlightedLine + idPtrOffset 
+    Pst.str(string(11, 13, "highlightedLine ="))               
+    Pst.Dec(highlightedLine)
+    Pst.str(string(11, 13, "highlightedFile ="))               
+    Pst.Dec(highlightedFile)
+    Cnc.SetInvert(0, highlightedLine * 8, Header#MAX_OLED_X, (highlightedLine * 8) + 7)
+    
+PUB CheckTerminalInput(tempValue, filesToDisplay, idPtrOffset) | localIdex
+
+  result := 1
+  
+  if tempValue
+    tempValue := Pst.CharIn
+    
+    if tempValue == "+" or tempValue == "-"
+      result := 0
+    elseif tempValue => "0" and tempValue =< "7"
+      tempValue -= "0"
+      result := 0
+  else
+    tempValue := highlightedLine
+    result := Cnc.Get165Value & buttonMask
+
+  Pst.ClearEnd
+  Pst.Newline
+  Pst.str(@selectFileTxt)
+  repeat localIdex from 1 to filesToDisplay
+    Pst.ClearEnd
+    Pst.Newline
+    Pst.Dec(localIdex)
+    Pst.str(string(")"))
+    Pst.str(@cncNumber)           
+    Pst.Dec(long[oledPtr[localIdex]])
+    
+  ifnot result
+    Cnc.InvertOff
+    case tempValue
+      1..7:
+        activeFile := fileIdNumber[tempValue + idPtrOffset - 1]
+        executeState := ACTIVE_EXECUTE
+      "+":
+        result := 1
+        return
+      "-":
+        result := -1
+        return
+      other:
+        executeState := INIT_EXECUTE
+        Cnc.SetOled(Header#AXES_READOUT_OLED, @oledMenu, @oledPtr, oledMenuLimit)
+    abort
+
+  result := 0
   
 CON
 
@@ -534,7 +679,7 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
   endFlag := 0
   delimiterCount := 0
   expectedChar := CODE_TYPE_CHAR
-  longfill(@filePosition, 0, 4)
+  'longfill(@filePosition, 0, 4)
   parameterIndex := 0
   scratchValue := 0
 
@@ -564,7 +709,7 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
 
   repeat
     result := Cnc.ReadByte(0)
-    filePosition[Header#DESIGN_AXIS]++
+    'filePosition[Header#DESIGN_AXIS]++
     Pst.str(string(11, 13, "Character = ", QUOTE))
     Cnc.SafeTx(result)
     Pst.Char(QUOTE)
@@ -644,12 +789,12 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
   repeat result from 0 to 3
     if result < 3
       'Cnc.WriteLong(endDat)
-      filePosition[result] += 4
+      'filePosition[result] += 4
     'Sd[result].closeFile
     Pst.str(string(11, 13, "filePosition["))
     Pst.Dec(result)
     Pst.str(string("] = "))
-    Pst.Dec(filePosition[result])
+    'Pst.Dec(filePosition[result])
     'UnmountSd(result)
     
   Pst.str(string(11, 13, "End of InterpreteDesign method."))
@@ -731,7 +876,7 @@ PUB SetZDown(localDownFlag)
     result := lowerZAmount * -1
   result *= microsteps
   'Sd[Header#Z_AXIS].writeLong(result)
-  filePosition[Header#Z_AXIS] += 4
+  'filePosition[Header#Z_AXIS] += 4
  
   downFlag := localDownFlag
     
@@ -1286,17 +1431,7 @@ PRI DisplayLineStats(localTimeFast, localTimeSlow, slowIndex, fastIndex, fast, s
     if pauseFlag
       Cnc.PressToContinueOrClose("c")
 
-PUB DivideWithRound(numerator, denominator)
-
-  if (numerator > 0 and denominator > 0) or {
-    } (numerator < 0 and denominator < 0) 
-    numerator += denominator / 2
-  else
-    numerator -= denominator / 2
-    
-  result := numerator / denominator
-
-PRI GetDec(sdInstance) | inputCharacter, negativeFlag, startOfNumberFlag
+{PRI GetDec(sdInstance) | inputCharacter, negativeFlag, startOfNumberFlag
 
   Pst.str(string(11, 13, "GetDec"))
   globalMultiplier := 0
@@ -1304,7 +1439,7 @@ PRI GetDec(sdInstance) | inputCharacter, negativeFlag, startOfNumberFlag
 
   repeat
     inputCharacter := Cnc.ReadByte(0)
-    filePosition[sdInstance]++
+    'filePosition[sdInstance]++
     Pst.str(string(11, 13, "inputCharacter = "))
     Cnc.SafeTx(inputCharacter)
     case inputCharacter
@@ -1342,7 +1477,7 @@ PRI GetDec(sdInstance) | inputCharacter, negativeFlag, startOfNumberFlag
 
   Pst.str(string(11, 13, "GetDec result = "))
   Pst.Dec(result)
-    
+    }
 PUB ReadM(sdInstance, localValue) : parameterCount | inputCharacter, expectedParameters, {
 } delimiterCount
 
@@ -1378,7 +1513,7 @@ PUB ReadM(sdInstance, localValue) : parameterCount | inputCharacter, expectedPar
     Pst.str(string(" = "))
     repeat  
       inputCharacter := Cnc.readByte(0)
-      filePosition[sdInstance]++
+      'filePosition[sdInstance]++
       Pst.Char(inputCharacter)
       case inputCharacter
         delimiter[0], delimiter[1], delimiter[2], delimiter[3], delimiter[4]:
@@ -1433,7 +1568,7 @@ PUB ReadD(sdInstance, localValue) : parameterCount | inputCharacter, expectedPar
     Pst.str(string(" = "))
     repeat  
       inputCharacter := Cnc.readByte(0)
-      filePosition[sdInstance]++
+      'filePosition[sdInstance]++
       Pst.Char(inputCharacter)
       case inputCharacter
         delimiter[0], delimiter[1], delimiter[2], delimiter[3], delimiter[4]:
@@ -1451,7 +1586,7 @@ PUB GetName(sdInstance, localPtr, localSize)
 
   repeat
     result := Cnc.ReadByte(0)
-    filePosition[sdInstance]++
+    'filePosition[sdInstance]++
     case result
       delimiter[0], delimiter[1], delimiter[2], delimiter[3], delimiter[4]:
         result := delimiter[0]
@@ -1461,7 +1596,7 @@ PUB GetName(sdInstance, localPtr, localSize)
 
   repeat while result <> delimiter[0] ' find end of program name even if it doesn't fit
     result := Cnc.ReadByte(0)
-    filePosition[sdInstance]++
+    'filePosition[sdInstance]++
     case result
       delimiter[0], delimiter[1], delimiter[2], delimiter[3], delimiter[4]:
         result := delimiter[0]
@@ -1484,9 +1619,9 @@ PUB OpenConfig
         Pst.Str(string(11, 13, 7, "Error! Previous session was not properly shutdown."))
         ResetConfig           }
       Header#TRANSITIONING_PROGRAM:
-        Pst.Str(string(11, 13, "Returning from ", QUOTE))
-        Pst.Str(Cnc.FindString(@programNames, previousProgram))
-        Pst.Char(QUOTE)
+        'Pst.Str(string(11, 13, "Returning from ", QUOTE))
+        'Pst.Str(Cnc.FindString(@programNames, previousProgram))
+        'Pst.Char(QUOTE)
         previousProgram := Header#DESIGN_INPUT_MAIN
         programState := Header#ACTIVE_PROGRAM
         Cnc.WriteData(0, @programState, Header#CONFIG_SIZE)
@@ -1496,10 +1631,15 @@ PUB OpenConfig
       other:
         Pst.Str(string(11, 13, 7, "Error! Configuration File Found But With Wrong programState."))
         Pst.Str(string(11, 13, 7))
-        Pst.Str(@endText)
+        'Pst.Str(@endText)
+        Pst.Str(@errorButContinueText)
         oledPtr := 0
-        Cnc.SetOled(Header#AXES_READOUT_OLED, @endText, @oledPtr, 1)
-        repeat 
+        oledPtr[1] := 0
+        Cnc.SetOled(Header#AXES_READOUT_OLED, @errorButContinueText, @oledPtr, 2)
+        previousProgram := Header#DESIGN_INPUT_MAIN
+        programState := Header#ACTIVE_PROGRAM
+        Cnc.WriteData(0, @programState, Header#CONFIG_SIZE)
+        waitcnt(clkfreq * 2 + cnt)
   else
     Pst.Str(string(11, 13, 7, "Error! Configuration File Not Found"))
     Pst.Str(string(11, 13, 7))
@@ -1548,13 +1688,13 @@ DAT
 cncName                 byte "CNA_0000.TXT", 0  ' Use all caps in file names or SD driver wont find them.
 
 
-programNames            byte "INIT_MAIN", 0
+{programNames            byte "INIT_MAIN", 0
                         byte "DESIGN_INPUT_MAIN", 0
                         byte "DESIGN_REVIEW_MAIN", 0
                         byte "DESIGN_READ_MAIN", 0
                         byte "MANUAL_JOYSTICK_MAIN", 0
                         byte "MANUAL_NUNCHUCK_MAIN", 0
-                        byte "MANUAL_POTS_MAIN", 0  
+                        byte "MANUAL_POTS_MAIN", 0 } 
                           
 DAT
 
@@ -1568,13 +1708,13 @@ axesText                byte "X_AXIS", 0
                         byte "Z_AXIS", 0
                         byte "DESIGN_AXIS", 0
 
-machineStateTxt         byte "INIT_STATE", 0
+{machineStateTxt         byte "INIT_STATE", 0
                         byte "DESIGN_INPUT_STATE", 0
                         byte "DESIGN_REVIEW_STATE", 0
                         byte "DESIGN_READ_STATE", 0
                         byte "MANUAL_JOYSTICK_STATE", 0
                         byte "MANUAL_NUNCHUCK_STATE", 0
-                        byte "MANUAL_POTS_STATE", 0
+                        byte "MANUAL_POTS_STATE", 0   }
 
 
 xyzLabels               byte "x = ", 0
@@ -1613,10 +1753,21 @@ oledMenu                byte "Highlight&Select", 0
                         byte " poteniometers", 0
                         byte " home machine", 0
 }                       
-
-
+                             '0123456789012345
+selectFileTxt           byte "  Select File", 0
+cncNumber               byte " CNC # ", 0
+                        byte " CNC # ", 0
+                        byte " CNC # ", 0
+                        byte " CNC # ", 0
+                        byte " CNC # ", 0
+                        byte " CNC # ", 0
+                        byte " CNC # ", 0
+                        
 homedText               byte "Machine Homed", 0
 endText                 byte "End of Program", 0
+                             '0123456789012345
+errorButContinueText    byte "Error Continuing", 0
+                        byte "  with Program", 0
 
 expectedCharText        byte "CODE_TYPE_CHAR", 0
                         byte "CODE_VALUE_CHAR", 0
@@ -1716,7 +1867,7 @@ buffer1Z                long 0[Header#HUB_BUFFER_SIZE]
 extra                   long 0[Header#MAX_ACCEL_TABLE - (6 * Header#HUB_BUFFER_SIZE)]
  }
 DAT
-propBeanie    byte $04, $0E, $0E, $0E, $0E, $0C, $0C, $0C, $0C, $0C, $0C, $0C, $04, $04, $04, $F4
+{propBeanie    byte $04, $0E, $0E, $0E, $0E, $0C, $0C, $0C, $0C, $0C, $0C, $0C, $04, $04, $04, $F4
               byte $F4, $04, $04, $04, $82, $06, $06, $06, $06, $06, $06, $07, $0F, $0E, $0E, $04
               byte $00, $00, $00, $80, $E0, $F0, $F8, $1C, $0E, $02, $01, $00, $00, $F8, $FF, $FF
               byte $FF, $FF, $FC, $00, $00, $01, $03, $06, $1C, $F8, $F0, $E0, $80, $00, $00, $00
@@ -1724,4 +1875,4 @@ propBeanie    byte $04, $0E, $0E, $0E, $0E, $0C, $0C, $0C, $0C, $0C, $0C, $0C, $
               byte $0F, $0F, $0F, $0F, $08, $08, $88, $88, $88, $80, $9F, $9F, $5F, $7C, $00, $00
               byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $01, $01, $01, $01, $01
               byte $01, $01, $01, $01, $01, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-  
+    }

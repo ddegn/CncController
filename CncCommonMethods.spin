@@ -1554,6 +1554,16 @@ PUB UnmountSd(sdInstance)
   'outa[_RedLedPin]~
   sdMountFlag[sdInstance] := 0
   
+PUB DivideWithRound(numerator, denominator)
+
+  if (numerator > 0 and denominator > 0) or {
+    } (numerator < 0 and denominator < 0) 
+    numerator += denominator / 2
+  else
+    numerator -= denominator / 2
+    
+  result := numerator / denominator
+
 PUB TtaMethodSigned(N, X, localD)   ' return X*N/D where all numbers and result are positive =<2^31
 
   result := 1
@@ -1897,7 +1907,7 @@ propBeanie    byte $04, $0E, $0E, $0E, $0E, $0C, $0C, $0C, $0C, $0C, $0C, $0C, $
               byte $0F, $0F, $0F, $0F, $08, $08, $88, $88, $88, $80, $9F, $9F, $5F, $7C, $00, $00
               byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $01, $01, $01, $01, $01
               byte $01, $01, $01, $01, $01, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-
+{
 lmrVB   ' vertical bytes 
               byte $00,$00,$00,$00,$00,$00,$00,$C8,$E4,$C0,$C0,$88,$08,$18,$10,$20
               byte $70,$20,$60,$00,$00,$10,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
@@ -1942,4 +1952,4 @@ lmr64         byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $
               byte $00, $00, $00, $00, $00, $00, $01, $01, $03, $03, $06, $05, $0E, $0B, $0D, $0F
               byte $07, $07, $03, $01, $01, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
               byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-                  
+                 } 

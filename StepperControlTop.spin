@@ -527,6 +527,7 @@ PUB CheckMenu(tempValue)
     result := Cnc.Get165Value & buttonMask
 
   ifnot result
+    Cnc.InvertOff
     case tempValue
       1, "o", "O": 
         machineState := Header#DESIGN_INPUT_STATE
@@ -545,7 +546,7 @@ PUB CheckMenu(tempValue)
         homedFlag := Header#SET_HOME_POSITION
       other:
         machineState := Header#INIT_STATE
-    Cnc.InvertOff
+        Cnc.SetOled(Header#AXES_READOUT_OLED, @oledMenu, @oledPtr, oledMenuLimit)
     abort
   
   Cnc.ReadAdc
