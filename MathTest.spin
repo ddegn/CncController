@@ -127,7 +127,8 @@ PUB BinNormal (y, x, b) : f                  ' calculate f = y/x * 2^b
   if y << 1 => x    ' Round off. In some cases better without.
       f++
 
-PUB TestMath | localIndex, localDelay[2], previousDelay[2], motorIndex, delayTotal[2]
+PUB TestMath | localIndex, localDelay[2], previousDelay[2], motorIndex, delayTotal[2], {
+} finishedFlag[2], difference
 
 ''C[i] = C[i-1] - ((2*C[i])/(4*i+1))
   minDelay[1] := TtaMethod(minDelay[0], maxDelay[1], maxDelay[0])
@@ -140,23 +141,30 @@ PUB TestMath | localIndex, localDelay[2], previousDelay[2], motorIndex, delayTot
   'Pst.str(string(" ticks"))
   Pst.str(string(11, 13, "delay[1][0] = "))
   Pst.Dec(localDelay[1])
+  longfill(@finishedFlag, 0, 2)
      
   localIndex := 1
   
   repeat
     repeat motorIndex from 0 to 1
+      if finishedFlag[motorIndex]
+        next
       previousDelay[motorIndex] := localDelay[motorIndex]
-      localDelay[motorIndex] -= (2 * localDelay[motorIndex]) / ((4 * localIndex) + 1)
+      if motorIndex
+        difference := TtaMethod(2 * localDelay[motorIndex], maxDelay[1], {
+        } maxDelay[0] * ((4 * localIndex) + 1))
+      else
+        difference := (2 * localDelay[motorIndex]) / ((4 * localIndex) + 1)
+      localDelay[motorIndex] -= difference
       delayTotal[motorIndex] += localDelay[motorIndex]
       Pst.str(string(11, 13, "delay["))
       Pst.Dec(motorIndex)
       Pst.str(string("]["))
       Pst.Dec(localIndex)
       Pst.str(string("] = "))
-      {Pst.Dec(localDelay / US_001)
-      Pst.str(string(" us = "))  }
       Pst.Dec(localDelay[motorIndex])
-      'Pst.str(string(" ticks"))
+      Pst.str(string(", difference = "))
+      Pst.Dec(difference)
       Pst.str(string(", fraction of previous = "))
       result := TtaMethod(localDelay[0], maxDelay[0], previousDelay[0])
       Pst.Dec(result)
@@ -169,7 +177,9 @@ PUB TestMath | localIndex, localDelay[2], previousDelay[2], motorIndex, delayTot
         Pst.Dec(motorIndex)
         Pst.str(string("] reached in "))
         Pst.Dec(localIndex)
-        Pst.str(string(" steps"))
+        Pst.str(string(" steps, minDelay = "))
+        Pst.Dec(minDelay[motorIndex])
+        finishedFlag[motorIndex] := 1
         PressToContinue
     Pst.str(string(11, 13, "total[1]/total[0] * 1000 = "))
     Pst.Dec(TtaMethod(delayTotal[1], 1000, delayTotal[0]))  
@@ -177,7 +187,7 @@ PUB TestMath | localIndex, localDelay[2], previousDelay[2], motorIndex, delayTot
       PressToContinue
     
     localIndex++  
-  while localDelay[0] > minDelay[0] or localDelay[1] > minDelay[1]
+  until finishedFlag[0] and finishedFlag[1] 'localDelay[0] > minDelay[0] or localDelay[1] > minDelay[1]
 
   Pst.str(string(11, 13, 11, 13, "Program Over"))
   repeat
