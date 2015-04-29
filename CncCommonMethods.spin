@@ -74,7 +74,7 @@ VAR
   long oledStack[200]
   long sdErrorNumber, sdErrorString, sdTryCount
   long filePosition[Header#NUMBER_OF_AXES]
-  long globalMultiplier
+  long globalMultiplier, globalDecPoints
   long oledLabelPtr, oledDataPtrPtr, oledDataQuantity ' keep together and in order
   long shiftRegisterOutput, shiftRegisterInput
   long adcData[8]
@@ -86,7 +86,7 @@ VAR
   'byte configData[Header#CONFIG_SIZE]
   byte sdFlag
   byte tstr[32]
-  
+  byte activeScrollRow
   
   
 DAT
@@ -193,6 +193,42 @@ PUB MenuSelection(fileNamePtr)
   waitcnt(clkfreq * 3 + cnt)
   reboot
     }    
+PUB ResetVerticalScroll
+
+  activeScrollRow := 0
+  
+PUB ScrollString(localStr, pstFlag)
+
+  if activeScrollRow < Header#OLED_LINES - 1
+    activeScrollRow++
+  else
+    ScrollBuffer(1)
+    
+  Write4x16String(localStr, strsize(localStr) <# 16, activeScrollRow, 0)
+  if pstFlag
+    Pst.ClearEnd
+    Pst.Newline
+    Pst.Str(localStr)
+    
+PUB Write4x16String(str, len, row, col)
+
+  Spi.Write4x16String(str, len, row, col)
+  
+PUB ScrollBuffer(lines)
+'' Positive values of "lines" will cause the buffer to scroll up, leaving room at the
+'' bottom.
+
+  lines := -7 #> lines <# 7
+  if lines < 0
+    bytemove(Spi.GetBuffer + (lines * Header#OLED_WIDTH), Spi.GetBuffer, {
+    } Header#OLED_WIDTH * (Header#OLED_LINES - lines))
+    bytefill(Spi.GetBuffer, 0, lines * Header#OLED_WIDTH)
+  elseif lines > 0
+    bytemove(Spi.GetBuffer, Spi.GetBuffer + (lines * Header#OLED_WIDTH), {
+    } Header#OLED_WIDTH * (Header#OLED_LINES - lines))
+    bytefill(Spi.GetBuffer + ((Header#OLED_LINES - lines) * Header#OLED_WIDTH), {
+    } 0, lines * Header#OLED_WIDTH)
+    
 PUB SetOled(state, labelPtr, dataPtrPtr, dataQuantity)
 
   oledState := state
@@ -1279,10 +1315,19 @@ PUB MoveBits(sourcePtrTop, sourcePtrBottom, offsetY)
    }
 
  }
-PRI GetDec(sdInstance) | inputCharacter, negativeFlag, startOfNumberFlag
+PUB GetMultiplier
+
+  result := globalMultiplier
+
+PUB GetDecPoints
+
+  result := globalDecPoints
+  
+PUB GetDec(sdInstance) | inputCharacter, negativeFlag, startOfNumberFlag
 
   Pst.str(string(11, 13, "GetDec"))
   globalMultiplier := 0
+  globalDecPoints := 0
   longfill(@negativeFlag, 0, 2)
 
   repeat
@@ -1296,6 +1341,8 @@ PRI GetDec(sdInstance) | inputCharacter, negativeFlag, startOfNumberFlag
         result *= 10
         result += inputCharacter - "0"
         globalMultiplier *= 10
+        if globalMultiplier
+          globalDecPoints++
       ".":
         globalMultiplier := 1
       "-":

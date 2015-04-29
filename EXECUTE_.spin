@@ -87,6 +87,7 @@ OBJ
   Format : "StrFmt"
   'Sd[1]: "SdSmall" 
   Cnc : "CncCommonMethods"
+  'Motor : "MotorControl"
    
 PUB Setup(parameter0, parameter1) | cncCog
 
@@ -106,6 +107,8 @@ PUB Setup(parameter0, parameter1) | cncCog
   until result
   Pst.RxFlush
 
+  TestMath
+  
   cncCog := Cnc.Start(spiLock)
 
   adcPtr := Cnc.GetAdcPtr
@@ -723,7 +726,8 @@ PUB ActiveExecute
   executeState := INIT_EXECUTE
   abort
 
-PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, previousExpectedChar
+PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, {
+} previousExpectedChar, localStr, activeRow
 
   endFlag := 0
   delimiterCount := 0
@@ -731,7 +735,7 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
   'longfill(@filePosition, 0, 4)
   parameterIndex := 0
   scratchValue := 0
-
+  activeRow := 0
   {Pst.str(string(11, 13, "accelerationTable[0] = "))
   Pst.Dec(accelerationTable[0])
   PressToContinueOrClose("c")   }
@@ -745,13 +749,19 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
   
   Pst.str(string(11, 13, "InterpreteDesign("))
   Pst.Dec(fileIndex)
-  Pst.Char(")")
-  Pst.str(string(11, 13, "Opening Design File"))
+  Pst.Char(")")      '0123456789012345
+  localStr := string(" Opening Design")
+  'Pst.ClearEnd
+  ''Pst.Newline
+  'Pst.str(localStr)
+  'Pst.str(string(11, 13, "Opening Design File"))
   
   Cnc.OpenFileToRead(0, fileNamePtr, fileIndex)
 
   Pst.str(string(11, 13, "Design file has been opened."))
-  
+  'Write4x16String(localStr, 15, activeRow++, 0)
+  Cnc.ScrollString(localStr, 1)
+  Cnc.ScrollString(fileNamePtr, 1)
   'Cnc.OpenOutputFilesW(fileIndex)
   
   'Pst.str(string(11, 13, "All output files have been opened."))
@@ -766,7 +776,7 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
     if delimiterCount and result == " " and expectedChar <> COMMENT_CHAR
       delimiterCount := 0
       Pst.str(string(11, 13, "Skipping first space after delimiter."))
-      Cnc.PressToContinue
+      'Cnc.PressToContinue
       next ' skip first space after a delimter
     elseif delimiterCount
       case result
@@ -825,6 +835,7 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
             Pst.str(string(11, 13, "comment = ", QUOTE))
             Pst.str(@commentFromFile)
             Pst.Char(QUOTE)
+            Cnc.ScrollString(@commentFromFile, 1)
           other:
             if commentIndex < MAX_COMMENT_CHARACTERS 
               commentFromFile[commentIndex++] := result
@@ -944,15 +955,15 @@ PUB GetStepsFromUnits(localUnits, localValue, localMultiplier)
       result := localValue
       return
     Header#TURN_UNIT:
-      result := localValue * Header#STEPS_PER_REV_NUMERATOR / Header#STEPS_PER_REV_DENOMINATOR
+      result := localValue * microsteps
       result /= localMultiplier
     Header#INCH_UNIT:
-      result := localValue * Header#STEPS_PER_REV_NUMERATOR / Header#STEPS_PER_REV_DENOMINATOR
+      result := localValue * microsteps
       result /= localMultiplier
       result *= 254
       result /= 50
     Header#MILLIMETER_UNIT:
-      result := localValue * Header#STEPS_PER_REV_NUMERATOR / Header#STEPS_PER_REV_DENOMINATOR
+      result := localValue * microsteps
       result /= localMultiplier
       result /= 5
       
@@ -960,63 +971,85 @@ PUB GetStepsFromUnits(localUnits, localValue, localMultiplier)
   
   Pst.Dec(result)
       
-PRI GetLine(sdInstance) | x0, y0, stepPosition[2], longAxis, shortAxis', totalTimePosition[2]
+PRI GetLine(sdInstance) | x0, y0, stepPosition[2], longAxis, shortAxis, localBuffer[7], {
+} localStr, multiplier[2], decPoints[2], original[2], size, localIndex
 '' x and y are relative to current position.
-   {
-  x0 := GetDec(sdInstance)
-  x0 := GetStepsFromUnits(units, x0, globalMultiplier)
-  y0 := GetDec(sdInstance)
-  y0 := GetStepsFromUnits(units, y0, globalMultiplier)
 
-  filePosition[Header#X_AXIS] += 4  ' all files will have holdDat or lineDat added
-  filePosition[Header#Y_AXIS] += 4
-  filePosition[Header#Z_AXIS] += 4
+  'Cnc.ScrollString(string("line")) 
+  original[0] := Cnc.GetDec(0)
+  multiplier[0] := Cnc.GetMultiplier
+  decPoints[0] := Cnc.GetDecPoints
+  x0 := GetStepsFromUnits(units, original[0], multiplier[0])
+  original[1] := Cnc.GetDec(0)
+  multiplier[1] := Cnc.GetMultiplier
+  decPoints[1] := Cnc.GetDecPoints
+  y0 := GetStepsFromUnits(units, original[1], multiplier[1])
+
+  'filePosition[Header#X_AXIS] += 4  ' all files will have holdDat or lineDat added
+  'filePosition[Header#Y_AXIS] += 4
+  'filePosition[Header#Z_AXIS] += 4
     
-  if x0 == 0
-    Pst.str(string(11, 13, "Vertical Line"))
-    'Sd[Header#X_AXIS].writeLong(holdDat)
-    'Sd[Header#Y_AXIS].writeLong(lineDat)
-    'Sd[Header#Z_AXIS].writeLong(holdDat)
-    'Sd[Header#Y_AXIS].writeLong(y0)  ' lineDat files have the number of steps included at beginning
-    filePosition[Header#Y_AXIS] += 4
+  if x0 == 0           '1234567890123
+    localStr := string("Vertical Line")
+  
+    'filePosition[Header#Y_AXIS] += 4
     longAxis := Header#Y_AXIS
     shortAxis := Header#X_AXIS
   elseif y0 == 0
-    Pst.str(string(11, 13, "Horizontal Line"))
-    'Sd[Header#X_AXIS].writeLong(lineDat)
-    'Sd[Header#Y_AXIS].writeLong(holdDat)
-    ''Sd[Header#Z_AXIS].writeLong(holdDat)
-    'Sd[Header#X_AXIS].writeLong(x0)
-    filePosition[Header#X_AXIS] += 4
+                       '123456789012345
+    localStr := string("Horizontal Line")
+    
+    'filePosition[Header#X_AXIS] += 4
     longAxis := Header#X_AXIS
     shortAxis := Header#Y_AXIS
   elseif ||x0 > ||y0
-    Pst.str(string(11, 13, "Low Slope Line"))
-    'Sd[Header#X_AXIS].writeLong(lineDat)
-    'Sd[Header#Y_AXIS].writeLong(lineDat)
-    'Sd[Header#Z_AXIS].writeLong(holdDat)
-    'Sd[Header#X_AXIS].writeLong(x0)
-    'Sd[Header#Y_AXIS].writeLong(y0)
-    'filePosition[Header#X_AXIS] += 4
-    'filePosition[Header#Y_AXIS] += 4
+                       '1234567890123456
+    localStr := string("Low Slope Line")
+ 
     'result := SlopedLine(Header#X_AXIS, Header#Y_AXIS, x0, y0)
     longAxis := Header#X_AXIS
     shortAxis := Header#Y_AXIS
   else'if x0 < y0
-    Pst.str(string(11, 13, "High Slope Line"))
-    {Sd[Header#X_AXIS].writeLong(lineDat)
-    Sd[Header#Y_AXIS].writeLong(lineDat)
-    Sd[Header#Z_AXIS].writeLong(holdDat)
-    Sd[Header#X_AXIS].writeLong(x0)
-    Sd[Header#Y_AXIS].writeLong(y0)
-    filePosition[Header#X_AXIS] += 4
-    filePosition[Header#Y_AXIS] += 4  }
+                       '1234567890123456
+    localStr := string("High Slope Line")
+
     'result := SlopedLine(Header#Y_AXIS, Header#X_AXIS, y0, x0)
     longAxis := Header#Y_AXIS
     shortAxis := Header#X_AXIS
   'else
   '  result := OneSlope(x0, y0)
-  result := SlopedLine(longAxis, shortAxis, x0[longAxis], x0[shortAxis])
+  'Pst.ClearEnd
+  'Pst.Newline
+  'Pst.Str(localStr)
+  
+  Cnc.ScrollString(localStr, 1)
+
+  repeat localIndex from 0 to 1
+    size := DecSize(original[localIndex])
+    if original[localIndex] < 0
+      size++
+    if decPoints[localIndex]
+      size++ 
+    result := Format.Str(@localBuffer, Cnc.FindString(@xyzLabels, localIndex))
+    result := Format.FDec(result, original[localIndex], size, decPoints[localIndex])
+    result := Format.Ch(result, " ")
+    result := Format.Str(result, Cnc.FindString(@unitsTxt, units))
+    byte[result] := 0
+    Cnc.ScrollString(@localBuffer, 1)
+    
+  repeat localIndex from 0 to 1
+    result := Format.Str(@localBuffer, Cnc.FindString(@xyzLabels, localIndex))
+    result := Format.Dec(result, x0[localIndex])
+    result := Format.Ch(result, " ")
+    result := Format.Str(result, Cnc.FindString(@unitsText, Header#STEP_UNIT))
+    byte[result] := 0
+    Cnc.ScrollString(@localBuffer, 1)
+
+  
+ 
+  '''Motor.MoveLine(longAxis, shortAxis, x0[longAxis], x0[shortAxis])
+  
+ { result := SlopedLine(longAxis, shortAxis, x0[longAxis], x0[shortAxis])
          
   Pst.str(string(11, 13, "Writing total delay to all files."))
   Pst.str(string(11, 13, "Total delay "))
@@ -1042,9 +1075,16 @@ PRI GetLine(sdInstance) | x0, y0, stepPosition[2], longAxis, shortAxis', totalTi
     Pst.Dec(long[result][1])
   'filePosition[Header#X_AXIS] += 4
   'filePosition[Header#Y_AXIS] += 4
-  'filePosition[Header#Z_AXIS] += 4
-  
-PRI SlopedLine(longAxis, shortAxis, longDistance, shortDistance) | accel[2], {
+  'filePosition[Header#Z_AXIS] += 4       }
+
+PUB DecSize(value)
+
+  repeat while value => 10
+    value /= 10
+    result++
+  result++
+     
+{PRI SlopedLine(longAxis, shortAxis, longDistance, shortDistance) | accel[2], {
 } decel[2], full[2], slowIndex, fastIndex, slow, fast, {
 } fastestIndex, localIndex, slowFullSpeedTimeTotal, slowFullSpeedTime, {
 } slowFullSpeedRemainder, extraCountsRemaining, addExtraCountInterval, {
@@ -1732,8 +1772,46 @@ PUB DHome
   Pst.Char(":")
   Pst.Char(32)
 
+PUB TestMath | localIndex, localDelay, previousDelay
+
+''C[i] = C[i-1] - ((2*C[i])/(4*i+1))
+  localDelay := maxDelay
+  Pst.str(string(11, 13, "delay[0] = "))
+  {Pst.Dec(maxDelay / US_001)
+  Pst.str(string(" us = "))}
+  Pst.Dec(localDelay)
+  'Pst.str(string(" ticks"))
+    
+  localIndex := 1
+  
+  repeat
+    previousDelay := localDelay
+    localDelay -= (2 * localDelay) / ((4 * localIndex) + 1)
+    Pst.str(string(11, 13, "delay["))
+    Pst.Dec(localIndex)
+    Pst.str(string("] = "))
+    {Pst.Dec(localDelay / US_001)
+    Pst.str(string(" us = "))  }
+    Pst.Dec(localDelay)
+    'Pst.str(string(" ticks"))
+    Pst.str(string(", fraction of previous = "))
+    result := localDelay * maxDelay / previousDelay
+    Pst.Dec(result)
+    Pst.str(string(" / "))
+    Pst.Dec(maxDelay)
+    ifnot localIndex // pauseInterval
+      Cnc.PressToContinue
+    localIndex++  
+  while localDelay > minDelay
+
+  Pst.str(string(11, 13, 11, 13, "Program Over"))
+  repeat
+  
 DAT
 
+pauseInterval           long 40
+minDelay                long 100 'US_001 * 1_000
+maxDelay                long 10_000 'US_001 * 20_000
 'cncName                 byte "CNA_0000.TXT", 0  ' Use all caps in file names or SD driver wont find them.
 
 
@@ -1752,6 +1830,11 @@ unitsText               byte "steps", 0
                         byte "inches", 0
                         byte "millimeters", 0
 
+unitsTxt                byte "steps", 0
+                        byte "turns", 0
+                        byte "in", 0
+                        byte "mm", 0
+
 axesText                byte "X_AXIS", 0
                         byte "Y_AXIS", 0
                         byte "Z_AXIS", 0
@@ -1767,8 +1850,8 @@ axesText                byte "X_AXIS", 0
 
 
 xyzLabels               byte "x = ", 0
-                        byte "y = ", 0
-                        byte "z = ", 0
+yLabel                  byte "y = ", 0
+zLabel                  byte "z = ", 0
                         byte "timer = ", 0
 
 adcLabels               byte "ADC X = ", 0
