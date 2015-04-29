@@ -151,8 +151,7 @@ PUB TestMath | localIndex, localDelay[2], previousDelay[2], motorIndex, delayTot
         next
       previousDelay[motorIndex] := localDelay[motorIndex]
       if motorIndex
-        difference := TtaMethod(2 * localDelay[motorIndex], maxDelay[1], {
-        } maxDelay[0] * ((4 * localIndex) + 1))
+        difference := TtaMethod(difference, maxDelay[1], maxDelay[0])
       else
         difference := (2 * localDelay[motorIndex]) / ((4 * localIndex) + 1)
       localDelay[motorIndex] -= difference
