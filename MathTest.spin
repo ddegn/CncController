@@ -127,7 +127,14 @@ PUB BinNormal (y, x, b) : f                  ' calculate f = y/x * 2^b
   if y << 1 => x    ' Round off. In some cases better without.
       f++
 
-PUB TestLoop | slowSteps, targetSlowSteps, lowGuess, highGuess, fractionGuess, {
+PUB TestLoop : difference
+
+  repeat
+    TestDifference(++difference)
+    startGuesss++
+    PressToContinue
+    
+PUB TestDifference(difference) | slowSteps, targetSlowSteps, lowGuess, highGuess, fractionGuess, {
 } fineAdjustFlag, previousGuess, tooHigh, tooLow, lowSteps, highSteps, startFlag
 
   targetSlowSteps := TtaMethod(timeToA, maxDelay[0], maxDelay[1])
@@ -155,14 +162,14 @@ PUB TestLoop | slowSteps, targetSlowSteps, lowGuess, highGuess, fractionGuess, {
       Pst.Dec(tooHigh)
       Pst.str(string(", tooLow = "))
       Pst.Dec(tooLow)
-      Pst.str(string(11, 13, "lowSteps was = "))
+      {Pst.str(string(11, 13, "lowSteps was = "))
       Pst.Dec(lowSteps)
       Pst.str(string(", highSteps was = "))
       Pst.Dec(highSteps)
       Pst.str(string(11, 13, "lowGuess was = "))
       Pst.Dec(lowGuess)
       Pst.str(string(", highGuess was = "))
-      Pst.Dec(highGuess)
+      Pst.Dec(highGuess) }
       if fractionGuess < lowGuess
         lowGuess := fractionGuess
       if fractionGuess > highGuess
@@ -175,17 +182,17 @@ PUB TestLoop | slowSteps, targetSlowSteps, lowGuess, highGuess, fractionGuess, {
       Pst.Dec(slowSteps)
       Pst.str(string(11, 13, "targetSlowSteps = "))
       Pst.Dec(targetSlowSteps)
-      Pst.str(string(11, 13, "lowSteps is = "))
+      {Pst.str(string(11, 13, "lowSteps is = "))
       Pst.Dec(lowSteps)
       Pst.str(string(", highSteps is = "))
       Pst.Dec(highSteps)
       Pst.str(string(11, 13, "lowGuess is = "))
       Pst.Dec(lowGuess)
       Pst.str(string(", highGuess is = "))
-      Pst.Dec(highGuess)
-      PressToContinue
+      Pst.Dec(highGuess)   }
+      'PressToContinue
     
-    slowSteps := TestMath(fractionGuess)
+    slowSteps := TestMath(fractionGuess, difference)
     startFlag := 1
     Pst.str(string(11, 13, "final fractionGuess = "))
     Pst.Dec(fractionGuess)
@@ -201,7 +208,7 @@ PUB TestLoop | slowSteps, targetSlowSteps, lowGuess, highGuess, fractionGuess, {
     Pst.Dec(tooHigh)
     Pst.str(string(", tooLow = "))
     Pst.Dec(tooLow)
-    PressToContinue
+    'PressToContinue
     if fineAdjustFlag
       if slowSteps < targetSlowSteps ' converges too fast need a higher guess
         tooLow := fractionGuess
@@ -217,7 +224,10 @@ PUB TestLoop | slowSteps, targetSlowSteps, lowGuess, highGuess, fractionGuess, {
         quit  
       if fractionGuess == previousGuess
         Pst.str(string(11, 13, 7, "Error, fractionGuess == previousGuess"))
-        repeat
+        Pst.str(string(11, 13, "Did not converge with difference = "))
+        Pst.Dec(difference)
+        Pst.str(string(11, 13, "Try again."))
+        return
 
     elseif slowSteps < targetSlowSteps
       tooLow := fractionGuess
@@ -255,7 +265,7 @@ PUB NextGuess(fractionGuess, previousGuess)
   result := (fractionGuess + previousGuess) >> 1
   
   
-PUB TestMath(fractionGuess) | localIndex, localDelay[2], previousDelay[2], motorIndex, delayTotal[2], {
+PUB TestMath(fractionGuess, fractionDifference) | localIndex, localDelay[2], previousDelay[2], motorIndex, delayTotal[2], {
 } finishedFlag[2], difference
 
 ''C[i] = C[i-1] - ((2*C[i])/(4*i+1))
@@ -284,14 +294,14 @@ PUB TestMath(fractionGuess) | localIndex, localDelay[2], previousDelay[2], motor
       if motorIndex
         difference := TtaMethod(difference, maxDelay[1], maxDelay[0])
         difference *= fractionGuess
-        difference /= fractionGuess - 1
-        Pst.str(string(11, 13, "fractionGuess = "))
-        Pst.Dec(fractionGuess)
+        difference /= fractionGuess - fractionDifference
+        'Pst.str(string(11, 13, "fractionGuess = "))
+        'Pst.Dec(fractionGuess)
       else
         difference := (2 * localDelay[motorIndex]) / ((4 * localIndex) + 1)
       localDelay[motorIndex] -= difference
       delayTotal[motorIndex] += localDelay[motorIndex]
-      Pst.str(string(11, 13, "delay["))
+      {Pst.str(string(11, 13, "delay["))
       Pst.Dec(motorIndex)
       Pst.str(string("]["))
       Pst.Dec(localIndex)
@@ -299,13 +309,13 @@ PUB TestMath(fractionGuess) | localIndex, localDelay[2], previousDelay[2], motor
       Pst.Dec(localDelay[motorIndex])
       Pst.str(string(", difference = "))
       Pst.Dec(difference)
-      Pst.str(string(", fraction of previous = "))
+      Pst.str(string(", fraction of previous = ")) }
       result := TtaMethod(localDelay[0], maxDelay[0], previousDelay[0])
-      Pst.Dec(result)
+      {Pst.Dec(result)
       Pst.str(string(" / "))
       Pst.Dec(maxDelay[motorIndex])
       Pst.str(string(", total = "))
-      Pst.Dec(delayTotal[motorIndex])
+      Pst.Dec(delayTotal[motorIndex]) }
       if localDelay[motorIndex] =< minDelay[motorIndex]
         Pst.str(string(11, 13, "minDelay["))
         Pst.Dec(motorIndex)
@@ -317,10 +327,10 @@ PUB TestMath(fractionGuess) | localIndex, localDelay[2], previousDelay[2], motor
         Pst.Dec(fractionGuess)
         finishedFlag[motorIndex] := 1
         result := localIndex
-        PressToContinue
+        'PressToContinue
         return
-    Pst.str(string(11, 13, "total[1]/total[0] * 1000 = "))
-    Pst.Dec(TtaMethod(delayTotal[1], 1000, delayTotal[0]))  
+    'Pst.str(string(11, 13, "total[1]/total[0] * 1000 = "))
+    'Pst.Dec(TtaMethod(delayTotal[1], 1000, delayTotal[0]))  
     ifnot localIndex // pauseInterval
       PressToContinue
     
@@ -333,7 +343,7 @@ DAT
 
 pauseInterval           long 40
 minDelay                long 80_000, 0-0 'US_001 * 1_000
-maxDelay                long 1_600_000, 3_200_000 'US_001 * 20_000
+maxDelay                long 1_600_000, 165_000 'US_001 * 20_000
 
 timeToA                 long 219
 startGuesss             long 2 '64
