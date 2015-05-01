@@ -14,149 +14,394 @@ DAT
 command                 long 0
 mailbox                 long 0
 
+maxDelay                long 80_000 * 50
+minDelay                long 80_000
+delayChange             long 8_000
+accelInterval           long 40_000
+accelIntervals          long 0-0
+
 'debugAddress            long 0-0
-dirMaskX                long 1 << Header#DIR_X_PIN
-dirMaskY                long 1 << Header#DIR_Y_PIN
-dirMaskZ                long 1 << Header#DIR_Z_PIN
+dirPinX                 long Header#DIR_X_PIN
+dirPinY                 long Header#DIR_Y_PIN
+dirPinZ                 long Header#DIR_Z_PIN
 stepMaskX               long 1 << Header#STEP_X_PIN
 stepMaskY               long 1 << Header#STEP_Y_PIN
 stepMaskZ               long 1 << Header#STEP_Z_PIN
   
-testBuffer                  long 0[TEST_BUFFER_SIZE]
+testBuffer              long 0[TEST_BUFFER_SIZE]
 
 OBJ
 
   Header : "HeaderCnc"
   Pst : "Parallax Serial TerminalDat"
   Format : "StrFmt"
+  Cnc : "CncCommonMethods"
    
 PUB Start(address165_) | debugPtr
 
   address165 := address165_
-  mailboxAddr := @mailbox
-  testBufferPtr = @testBuffer
-  'debugAddress :=
+ 
+  testBufferPtr := @testBuffer
+ 
   debugPtr := @debugAddress0
+
+  accelIntervals := ComputeAccelIntervals(maxDelay, minDelay, delayChange)
+  
   repeat result from 0 to Header#MAX_DEBUG_SPI_INDEX
     debugAddress0[result] := debugPtr
     debugPtr += 4
     
-  cognew(@entry, @command) + 1
+  cognew(@entry, @command)
 
-  'repeat while command
-   
-  'Init
-    
-PUB Stop
-'' Stop SPI Engine - frees a cog
-
-  if cog
-     cogstop(cog~ - 1)
-  command~
-
-PUB SpiL
-
-  repeat while lockset(spiLock)
-
-PUB SpiC
-
-  lockclr(spiLock)
+  waitcnt(clkfreq / 100 + cnt)
   
+  SetMotorParameters(maxDelay, minDelay, delayChange, accelInterval)
+
 PUB SetCommand(cmd)
 
-  SpiL
   command := cmd                '' Write command 
   repeat while command          '' Wait for command to be cleared, signifying receipt
-    {if cmd == Header#ADC_SPI
-  
-      Pst.Str(string(11, 13, "adcRequest = "))
-      Pst.Dec(long[debugAddress0])
-      Pst.Str(string(" = "))
-      ReadableBin(long[debugAddress0], 32)
-      Pst.Str(string(11, 13, "activeAdcPtr = "))
-      Pst.Dec(long[debugAddress1])
-      Pst.Str(string(", adcPtr = "))
-      Pst.Dec(adcPtr)
-      Pst.Str(string(11, 13, "dataValue = "))
-      Pst.Dec(long[debugAddress2])
-      Pst.Str(string(" = "))
-      ReadableBin(long[debugAddress2], 32)
-      Pst.Str(string(11, 13, "bufferAddress = "))
-      Pst.Dec(long[debugAddress3])
-      Pst.Str(string(11, 13, "dataOut = "))
-      Pst.Dec(long[debugAddress4])
-      Pst.Str(string(" = "))
-      ReadableBin(long[debugAddress4], 32)
-      Pst.Str(string(11, 13, "byteCount = "))
-      Pst.Dec(long[debugAddress5])
-      Pst.Str(string(11, 13, "location clue = "))
-      Pst.Dec(long[debugAddress6])
-      Pst.Str(string(11, 13, "dataOutToShred = "))
-      Pst.Dec(long[debugAddress7])
-      Pst.Str(string(" = "))
-      ReadableBin(long[debugAddress7], 32)
-      Pst.Str(string(11, 13, "adcInUseCog = "))
-      Pst.Dec(long[debugAddress8])   }
-  SpiC
-      
-PRI Init
-
- 
 
 PUB GetPasmArea
+'' To reuse memory if desired.
 
   result := @entry 
 
+PUB SetMaxDelay(localMax)
 
-PUB MoveLine(longAxis, shortAxis, longDistance, shortDistance) 
+  SetMotorParameters(localMax, minDelay, delayChange, accelInterval)
+  
+PUB SetMinDelay(localMin)
+
+  SetMotorParameters(maxDelay, localMin, delayChange, accelInterval)
+  
+PUB SetDelayChange(localChange)
+
+  SetMotorParameters(maxDelay, minDelay, localChange, accelInterval)
+  
+PUB SetMotorParameters(localMax, localMin, localChange, localAccelInterval)
+
+  longmove(@maxDelay, @localMax, 4)
+
+  mailbox := @result
+  result := @maxDelay
+  accelIntervals := ComputeAccelIntervals(localMax, localMin, localChange)
+  SetCommand(Header#NEW_PARAMETERS_MOTOR)
+
+PRI ComputeAccelIntervals(localMax, localMin, localChange)
+
+  result := localMax - localMin
+  result += localChange - 1     ' make sure divide doesn't truncate value at all
+  result /= localChange
+  
+PUB MoveSingle(localAxis, localDistance)
+
+  Pst.Str(string(11, 13, "MoveSingle("))
+  Pst.Dec(localAxis)
+  Pst.Str(string(", "))
+  Pst.Dec(localDistance)
+  Pst.Str(string("), accelIntervals = "))
+  Pst.Dec(accelIntervals)
+  
+  localAxis := stepMaskX[localAxis]
+  if localDistance < 0
+    dira[dirPinX[localAxis]] := 0
+    ||localDistance
+  else
+    dira[dirPinX[localAxis]] := 1
+      
+  mailbox := @result
+  Pst.Str(string(11, 13, "localAxis (mask) "))
+  Cnc.ReadableBin(localAxis, 32)
+  
+  Cnc.PressToContinue
+   
+  'SetCommand(Header#SINGLE_MOTOR)
+  command := Header#SINGLE_MOTOR
+  repeat while command          '' Wait for command to be cleared, signifying receipt
+    Pst.Str(string(11, 13, "location = ")) ' watch progress
+    Pst.Dec(debugAddressF)
+    Pst.Str(string(", ")) ' watch progress
+    Pst.Dec(debugAddressE)
+    Pst.Str(string(", fastTotal = ")) ' watch progress
+    Pst.Dec(debugAddressA)
+    Pst.Str(string(", activeDelay = ")) ' watch progress
+    Pst.Dec(debugAddress1)
+    Pst.Str(string(" or ")) ' watch progress
+    Pst.Dec(debugAddress1 / 80_000)
+    Pst.Str(string(" ms, delayTotal = ")) ' watch progress
+    Pst.Dec(debugAddress3)
+    Pst.Str(string(" or ")) ' watch progress
+    Pst.Dec(debugAddress3 / 80_000)
+    Pst.Str(string(" ms")) ' watch progress
+
+  Pst.Str(string(11, 13, "full speed steps = "))
+  Pst.Dec(result)
+  
+   
+PUB MoveLine(longAxis, shortAxis, longDistance, shortDistance) | {
+} startDelay[2], accelChange[2] 
 
   repeat result from 0 to 1
     longAxis[result] := stepMaskX[longAxis[result]]
     if longDistance[result] < 0
-      dirMask[longAxis[result]] := 0
+      dira[dirPinX[longAxis[result]]] := 0
       ||longDistance[result]
     else
-      dirMask[longAxis[result]] := 1
+      dira[dirPinX[longAxis[result]]] := 1
       
   mailbox := @result
 
-  SetCommand(Header#DRV8711_WRITE_SPI)
-  
-PUB WriteDrv8711(axis, register, value) 
-
-  axis := 1 << (axis * Header#CHANNELS_PER_CS)
-  mailbox := @result
-  SetCommand(Header#DRV8711_WRITE_SPI) ' PASM code should not retrun to normal loop until CS low again
-  
+  SetCommand(Header#DUAL_MOTOR)
+    
 DAT                     org
 '------------------------------------------------------------------------------
-entry
-commandCog              or      dira, latch165Mask
-dataOutToShred          or      outa, latch165Mask  ' This long gets reused as a temp variable
-shiftRegisterInput      or      dira, latch595Mask
-shiftOutputChange       or      dira, clockMask
-dataValue               or      dira, mosiMask
-dataOut                 or      dira, shiftMosiMask
-byteCount               or      dira, shiftClockMask                        
-                        
-'bitCount                or      dira, p4
-                                     
-bitsFromPasmCog         mov     bitsFromPasmCog, csOledChanMask
-bitsFromSpinCog         or      bitsFromPasmCog, csAdcChanMask
-                        'or      dira, p4Cs
-                        
-                        wrlong  con111, debugAddressF                        
-adcInUseCog             jmp     #setAdc
+entry                   or      dira, stepMask
+                        andn    outa, stepMask
+
+                        mov     mailboxAddr, par
+
+                        'mov     byteCount, #4    
+                        add     mailboxAddr, #4   ' ** convert to loop
+                        mov     maxDelayAddr, mailboxAddr
+                        add     maxDelayAddr, #4
+                        mov     minDelayAddr, maxDelayAddr
+                        add     minDelayAddr, #4
+                        mov     delayChangeAddr, minDelayAddr
+                        add     delayChangeAddr, #4
+                        mov     accelIntervalAddr, delayChangeAddr
+                        add     accelIntervalAddr, #4
+                        mov     accelIntervalsAddr, accelIntervalAddr
+                        add     accelIntervalsAddr, #4                                      
+                        wrlong  con111, debugAddressF
+
 ' Pass through only on start up.                        
 '------------------------------------------------------------------------------
-   
+mainPasmLoop            wrlong  zero, par  ' used to indicate command complete
+                        
+smallLoop               rdlong  commandCog, par wz 
+              if_z      jmp     #smallLoop
+                        add     commandCog, #jumpTable
+                       
+                        jmp     commandCog
+jumpTable               jmp     #smallLoop
+                        
+                        jmp     #driveOne
+                        jmp     #driveTwo
+                        jmp     #driveThree
+                        jmp     #newParameters
+                        
+'#0, IDLE_MOTOR, SINGLE_MOTOR, DUAL_MOTOR, TRIPLE_MOTOR, NEW_PARAMETERS_MOTOR
+
 '------------------------------------------------------------------------------
 {{
       C[i] = C[i-1] - ((2*C[i])/(4*i+1))
           
 }}
 '------------------------------------------------------------------------------
-driveOne                rdlong  resultPtr, mailboxAddr                        
+'------------------------------------------------------------------------------
+DAT driveOne            rdlong  resultPtr, mailboxAddr                        
+                        mov     bufferAddress, resultPtr
+                        wrlong  con222, debugAddressF
+                        'wrlong  resultPtr, debugAddress0
+                        add     bufferAddress, #4
+                        rdlong  fastMask, bufferAddress             
+                        'wrlong  bufferAddress, debugAddress1
+                        'wrlong  shiftOutputChange, debugAddress2
+                        add     bufferAddress, #4
+                        mov     fastTotal, zero
+                        mov     delayTotal, zero
+                        'rdlong  slowMask, bufferAddress              
+                        'wrlong  bufferAddress, debugAddress3
+                        'wrlong  outputData, debugAddress4
+                        'add     bufferAddress, #4
+                        rdlong  fastDistance, bufferAddress             
+                        'add     bufferAddress, #4
+                        'rdlong  slowDistance, bufferAddress             
+                        mov     activeHalfDelay, halfMaxDelayCog
+                        mov     activeDelay, maxDelayCog
+                        'mov     activeHalfChange, halfDelayChangeCog
+                        mov     activeChange, delayChangeCog
+                        'mov     activeHalfMinDelayCog, halfMinDelayCog
+                        'mov     activeMinDelayCog, minDelayCog
+                                      'activeChange
+                                
+                        'andn    outa, fastMask
+                                'cmpsub if d > s write c 
+                                'sub    if d < s write c 
+                                'cmp    if d < s write c
+                                'cmps   if d < s write c signed
+                        mov     fullStepsF, fastDistance        
+                        cmp     fullStepsF, doubleAccel wc
+              if_nc     jmp     #setFullSpeedSingleSteps              
+              if_c      jmp     #setLowSpeedSingleSteps
+
+continueSingleSetup     sub     fullStepsF, accelStepsF
+                        sub     fullStepsF, decelStepsF
+                        add     fullStepsF, #1
+                        add     accelStepsF, #1
+                        add     decelStepsF, #1
+' Add one to fullStepsF other acceleration steps to allow the use of djnz later.
+                                         
+                        'mov     stepDelay, activeHalfDelay
+                       
+                        mov     nextAccelTime, cnt
+                        mov     nextStepTime, nextAccelTime
+                        mov     nextHalfStepTime, nextAccelTime
+                        add     nextAccelTime, accelIntervalCog
+                        
+accelLoopSingle         djnz    accelStepsF, #accelSingleBody
+
+                        jmp     #fullSpeedSizeCheck
+' exit acceleration loop                        
+' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+                        
+accelSingleBody         call    #stepFastHigh
+'                                                
+firstPartOfStepA        cmp     nextHalfStepTime, cnt wc  ' ** use waitcnt instead?
+                        wrlong  con111, debugAddressE
+              if_nc     jmp     #firstPartOfStepA
+              
+                        andn    outa, fastMask
+                        
+secondPartOfStepA       cmp     nextStepTime, cnt wc
+                        wrlong  con222, debugAddressE
+              if_nc     jmp     #secondPartOfStepA
+                        wrlong  con777, debugAddressE
+                        cmp     nextAccelTime, cnt wc ' check if acceleration time
+              if_nc     jmp     #accelLoopSingle
+
+decreaseDelay           sub     activeHalfDelay, activeHalfChange
+                        sub     activeDelay, activeChange
+                        wrlong  activeDelay, debugAddress1
+                        add     nextAccelTime, accelIntervalCog
+
+                        'cmp     activeDelay, minDelayCog wc wz
+          if_nc_and_nz  jmp     #decelSingleEnter
+
+' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+' begin full speed
+fullSpeedSizeCheck      mov     lastAccelDelay, activeDelay
+                        mov     lastAccelHalfDelay, activeHalfDelay
+' Remember last acceleration delay so the decel delays calculate correctly.
+                                                                                                        
+                        tjz     shortFlag, #fullSpeedLoopEnter 'shortCenter
+' We want to know if we should use minDelayCog or the last computed delay.
+
+' The code below is used is full speed is reached in the acceleration section.                        
+                        mov     activeDelay, minDelayCog
+                        mov     activeHalfDelay, minHalfDelayCog
+                        
+fullSpeedLoopEnter      wrlong  con555, debugAddressF
+                        wrlong  activeDelay, debugAddress1
+fullSpeedLoop           djnz fullStepsF, #fullSpeedSingleBody ' awkward code
+' We previously added one to fullStepsF so this fist djnz doesn't mess out the step count.
+                        jmp     #decelSingleEnter
+' exit full speed loop
+' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+
+
+fullSpeedSingleBody     call    #stepFastHigh
+
+firstPartOfStepFull     cmp     nextHalfStepTime, cnt wc  ' ** use waitcnt instead?
+                        wrlong  con333, debugAddressE
+              if_nc     jmp     #firstPartOfStepFull
+              
+                        andn    outa, fastMask
+                        
+secondPartOfStepFull    cmp     nextStepTime, cnt wc
+                        wrlong  con444, debugAddressE
+              if_nc     jmp     #secondPartOfStepFull
+                        wrlong  con888, debugAddressE
+                        jmp     fullSpeedLoop
+                        
+' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+' decelerate
+
+decelSingleEnter        wrlong  con777, debugAddressF
+                        mov     activeDelay, lastAccelDelay
+                        mov     activeHalfDelay, lastAccelHalfDelay
+                        mov     nextAccelTime, nextStepTime ' ** not sure about timing
+                        add     nextAccelTime, accelIntervalCog
+' Use last acceleration delay so the decel delays calculate correctly.
+                                                                                                        
+                        
+decelLoopSingle         djnz    decelStepsF, #decelSingleBody
+
+                        jmp     #finishSingleMove
+' exit deceleration loop                        
+' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+ 
+decelSingleBody         call    #stepFastHigh
+
+firstPartOfStepD        cmp     nextHalfStepTime, cnt wc  ' ** use waitcnt instead?
+                        wrlong  con555, debugAddressE
+              if_nc     jmp     #firstPartOfStepD
+              
+                        andn    outa, fastMask
+                        
+secondPartOfStepD       cmp     nextStepTime, cnt wc
+                        wrlong  con666, debugAddressE
+              if_nc     jmp     #secondPartOfStepD
+
+                        wrlong  con999, debugAddressE
+              
+                        cmp     nextAccelTime, cnt wc ' check if acceleration time
+              if_nc     jmp     #decelLoopSingle'cceleration
+
+increaseDelay           add     activeHalfDelay, activeHalfChange
+                        add     activeDelay, activeChange
+                        wrlong  activeDelay, debugAddress1
+                        add     nextAccelTime, accelIntervalCog
+                        jmp     #decelLoopSingle
+                        
+' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+finishSingleMove        wrlong  con999, debugAddressF
+                        jmp     #mainPasmLoop
+
+'------------------------------------------------------------------------------
+setFullSpeedSingleSteps mov     accelStepsF, accelIntervalsCog
+                        mov     decelStepsF, accelIntervalsCog
+                        'mov     fullStepsF, fastDistance
+                        mov     shortFlag, zero
+                        wrlong  con333, debugAddressF
+                        jmp     #continueSingleSetup
+'------------------------------------------------------------------------------
+setLowSpeedSingleSteps  mov     accelStepsF, fastDistance
+                        shr     accelStepsF, #1
+                        mov     decelStepsF, accelStepsF
+                        mov     shortFlag, #1
+                        wrlong  con444, debugAddressF
+                        jmp     #continueSingleSetup 
+'------------------------------------------------------------------------------
+accelerateSingle
+accelerateSingle_ret    ret
+
+'------------------------------------------------------------------------------
+setupNextStep
+
+'------------------------------------------------------------------------------
+DAT stepFastHigh        or      outa, fastMask
+                        add     nextHalfStepTime, activeHalfDelay
+                        add     delayTotal, activeDelay
+                        wrlong  delayTotal, debugAddress3
+                        add     nextStepTime, activeDelay
+                        add     fastTotal, #1
+                        wrlong  fastTotal, debugAddressA 'totalFromPasmFastPtr
+stepFastHigh_ret        ret
+'------------------------------------------------------------------------------
+stepSlowHigh            or      outa, slowMask
+                        add     nextHalfStepTimeS, activeHalfDelayS
+                        add     delayTotalS, activeDelayS
+                        wrlong  delayTotalS, debugAddress4
+                        add     nextStepTimeS, activeDelayS
+                        add     slowTotal, #1
+                        wrlong  slowTotal, debugAddressB 'totalFromPasmFastPtr
+stepSlowHigh_ret        ret
+'------------------------------------------------------------------------------
+'------------------------------------------------------------------------------
+driveTwo                rdlong  resultPtr, mailboxAddr                        
                         mov     bufferAddress, resultPtr
                         'wrlong  con222, debugAddressF
                         'wrlong  resultPtr, debugAddress0
@@ -165,7 +410,7 @@ driveOne                rdlong  resultPtr, mailboxAddr
                         'wrlong  bufferAddress, debugAddress1
                         'wrlong  shiftOutputChange, debugAddress2
                         add     bufferAddress, #4
-                        'mov     cogDelay, bitDelay
+                        'mov     stepDelay, bitDelay
                         rdlong  slowMask, bufferAddress              
                         'wrlong  bufferAddress, debugAddress3
                         'wrlong  outputData, debugAddress4
@@ -176,63 +421,31 @@ driveOne                rdlong  resultPtr, mailboxAddr
                         
                         andn    outa, fastMask
                         andn    outa, slowMask
-                       
-                        
-                        
-                        wrlong  outputData, debugAddress5
-                        
-                        call    #spiBits
                      
-                        and     inputData, twelveBits
-                        wrlong  inputData, resultPtr                        
-                        'andn    outa, p4Cs
-                        call    #low595
-                        wrlong  con999, debugAddressF
-                        jmp     #loopSpi
+                        jmp     #mainPasmLoop
 
-                       
 '------------------------------------------------------------------------------
-writeDrv8711Pasm        rdlong  resultPtr, mailboxAddr                        
-                        mov     bufferAddress, resultPtr
-                        add     bufferAddress, #4
-                        rdlong  shiftOutputChange, bufferAddress ' CS mask               
-                        add     bufferAddress, #4
-                        rdlong  outputData, bufferAddress  ' register to write           
-                        add     bufferAddress, #4
-                        mov     cogDelay, bitDelay
-                        rdlong  dataValue, bufferAddress  ' data to write
-                        shl     outputData, #12          ' shift regiter to make remove for data
-                        or      outputData, dataValue    ' combine regiter and data     
-                        call    #high595
-                        'or      outa, p4Cs
-                        mov     bitCount, #16 
-                        
-                        call    #spiBits
-                        
-                        'andn    outa, p4Cs
-                        call    #low595
-                        jmp     #loopSpi
+driveThree              jmp     #mainPasmLoop         
+'------------------------------------------------------------------------------
+DAT newParameters       rdlong  maxDelayCog, maxDelayAddr 
+                        mov     halfMaxDelayCog, maxDelayCog
+                        shr     halfMaxDelayCog, #1                    
+                        rdlong  minDelayCog, minDelayAddr
+                        mov     halfMinDelayCog, minDelayCog
+                        shr     halfMinDelayCog, #1                    
+                        rdlong  delayChangeCog, delayChangeAddr 
+                        'mov     halfDelayChangeCog, delayChangeCog
+                        'shr     halfDelayChangeCog, #1            
+                        rdlong  accelIntervalCog, accelIntervalAddr 
+                        rdlong  accelIntervalsCog, accelIntervalsAddr
+                        mov     doubleAccel, accelIntervalsCog
+                        add     doubleAccel, accelIntervalsCog
+                        jmp     #mainPasmLoop        
+'------------------------------------------------------------------------------
+
                               
 '------------------------------------------------------------------------------
-'' The variables "outputData", "bitCount" and "bitDelay" should be set
-'' prior to calling spiBits
 
-spiBits                 ror     outputData, bitCount
-                        wrlong  outputData, debugAddress6
-                        wrlong  con777, debugAddressF
-                        mov     wait, cnt
-                        add     wait, cogDelay
-:loop
-                        rcl     outputData, #1  wc
-                        waitcnt wait, cogDelay
-                        andn    outa, clockMask
-                        muxc    outa, mosiMask
-                        waitcnt wait, cogDelay
-                        or      outa, clockMask
-                        test    misoMask, ina  wc
-                        rcl     inputData, #1
-                        djnz    bitCount, #:loop
-spiBits_ret             ret
 '------------------------------------------------------------------------------
 {{
         mathResult (32-bit) := mathA (32-bit) * mathB (32-bit)
@@ -252,7 +465,7 @@ spiBits_ret             ret
               (mathA * mathB_lo)
             + (mathA_lo * mathB_hi) << 16   
 }}
-multiply1      ' setup
+{multiply1      ' setup
                         mov     mathResult, #0      ' Primary accumulator (and final result)
                         mov     tmp1, mathA      ' Both my secondary accumulator,
                         shl     tmp1, #16     ' and the lower 16 bits of mathA.
@@ -294,20 +507,21 @@ divide                  shl     mathB, #15
                         mov     mathResult, mathA
                         and     mathResult, sixteenBits
                                                
-divide_ret              ret
+divide_ret              ret }
 '------------------------------------------------------------------------------
 zero                    long 0                  '' Constant
-sixteenBits             long %1111_1111_1111_1111
-bufferSize              long OLED_BUFFER_SIZE
+'sixteenBits             long %1111_1111_1111_1111
+'bufferSize              long OLED_BUFFER_SIZE
                                               
 'csMask                  long %10000                  '' Used for Chip Select mask
-mailboxAddr             long 0                    
 bufferAddress           long 0                  '' Used for buffer address
 
 DAT ' PASM Variables
 
 negativeOne             long -1
-
+'destinationIncrement    long %10_0000_0000
+'destAndSourceIncrement  long %10_0000_0001
+'sourceIncrement         long 1
 bits165                 long 1 << Header#OVER_TRAVEL_X_POS_165 | {
                            } 1 << Header#OVER_TRAVEL_X_NEG_165 | {
                            } 1 << Header#OVER_TRAVEL_Y_POS_165 | {
@@ -333,7 +547,8 @@ con888                  long 888
 con999                  long 999
                                            
 
-     
+stepMask                long 1 << Header#STEP_X_PIN | 1 << Header#STEP_Y_PIN | 1 << Header#STEP_Z_PIN
+    
 testBufferPtr           long 0-0
 address165              long 0-0
 debugAddress0           long 0-0
@@ -353,7 +568,7 @@ debugAddressD           long 0-0
 debugAddressE           long 0-0
 debugAddressF           long 0-0
 
-cogDelay                res 1
+stepDelay               res 1
 wait                    res 1
 adcRequest              res 1
 activeAdcPtr            res 1
@@ -366,13 +581,69 @@ readErrors              res 1
                     
 loopCount               res 1
 debugPtrCog             res 1
-mathA                   res 1
+{mathA                   res 1
 mathB                   res 1
 mathResult              res 1
 tmp1                    res 1 
-tmp2                    res 1
+tmp2                    res 1}
 fastMask                res 1
 slowMask                res 1
+mailboxAddr             res 1
+maxDelayAddr            res 1   
+minDelayAddr            res 1   
+delayChangeAddr         res 1   
+accelIntervalAddr       res 1   
+accelIntervalsAddr      res 1   
+maxDelayCog             res 1
+minDelayCog             res 1
+delayChangeCog          res 1
+accelIntervalCog        res 1
+accelIntervalsCog       res 1
+doubleAccel             res 1
+accelStepsF             res 1
+accelStepsS             res 1
+decelStepsF             res 1
+decelStepsS             res 1
+fullStepsF              res 1
+fullStepsS              res 1
+halfMaxDelayCog         res 1
+halfMinDelayCog         res 1
+'halfDelayChangeCog      res 1
+activeHalfDelay         res 1
+activeDelay             res 1
+activeHalfChange        res 1
+activeChange            res 1
+activeHalfDelayS        res 1
+activeDelayS            res 1
+activeHalfChangeS       res 1
+activeChangeS           res 1
+commandCog              res 1
+'dataOutToShred          res 1
+shiftRegisterInput      res 1
+'shiftOutputChange       res 1
+'dataValue               res 1
+'dataOut                 res 1
+'byteCount               res 1
+'lastAccelTime           res 1
+fastTotal               res 1
+slowTotal               res 1
+delayTotal              res 1
+delayTotalS             res 1
+fastDistance            res 1
+slowDistance            res 1
+nextAccelTime           res 1
+nextAccelTimeS          res 1
+nextStepTime            res 1
+nextStepTimeS           res 1
+nextHalfStepTime        res 1
+nextHalfStepTimeS       res 1
+lastAccelDelay          res 1
+lastAccelDelayS         res 1
+lastAccelHalfDelay      res 1
+lastAccelHalfDelayS     res 1
+shortFlag               res 1
+minHalfDelayCog         res 1
+minHalfDelayCogS        res 1
                         fit
 
 DAT

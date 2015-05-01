@@ -1,4 +1,4 @@
-DAT programName         byte "EXECUTE_", 0
+DAT programName         byte "MathTest", 0
 CON
 {  Design Execute
   This sub program reads the design file from the SD card and executes the instructions.
@@ -100,7 +100,7 @@ PUB Setup
   until result
   Pst.RxFlush
 
-  TestLoop
+  TestMath 'TestLoop
 
 PUB PressToContinue
   
@@ -192,7 +192,7 @@ PUB TestDifference(difference) | slowSteps, targetSlowSteps, lowGuess, highGuess
       Pst.Dec(highGuess)   }
       'PressToContinue
     
-    slowSteps := TestMath(fractionGuess, difference)
+   ' slowSteps := TestMath(fractionGuess, difference)
     startFlag := 1
     Pst.str(string(11, 13, "final fractionGuess = "))
     Pst.Dec(fractionGuess)
@@ -265,24 +265,52 @@ PUB NextGuess(fractionGuess, previousGuess)
   result := (fractionGuess + previousGuess) >> 1
   
   
-PUB TestMath(fractionGuess, fractionDifference) | localIndex, localDelay[2], previousDelay[2], motorIndex, delayTotal[2], {
-} finishedFlag[2], difference
+PUB TestMath | localIndex, localDelay[2], previousDelay[2], motorIndex, delayTotal[2], {
+} finishedFlag[2], finishedFlagI[2], difference0, difference1, nNum[2], nDenom[2], {
+} iFactor[2], localDelayI[2], delayTotalI[2], finalTotal[2], finalTotalI[2], {
+} finalSteps[2], finalStepsI[2]
 
 ''C[i] = C[i-1] - ((2*C[i])/(4*i+1))
   minDelay[1] := TtaMethod(minDelay[0], maxDelay[1], maxDelay[0])
-  delayTotal[0] := localDelay[0] := maxDelay[0]
-  delayTotal[1] := localDelay[1] := maxDelay[1]
-  Pst.str(string(11, 13, "delay[0][0] = "))
-  {Pst.Dec(maxDelay / US_001)
-  Pst.str(string(" us = "))}
-  Pst.Dec(localDelay[0])
-  'Pst.str(string(" ticks"))
-  Pst.str(string(11, 13, "delay[1][0] = "))
-  Pst.Dec(localDelay[1])
-  Pst.str(string(11, 13, "fractionGuess = "))
-  Pst.Dec(fractionGuess)
-        
-  longfill(@finishedFlag, 0, 2)
+  
+  nNum[0] := 4
+  nNum[1] := 4 * maxDelay[0] 
+  nDenom[0] := 1
+  nDenom[1] := maxDelay[1]
+ 
+  repeat motorIndex from 0 to 1
+    localDelay[motorIndex] := maxDelay[motorIndex]
+    delayTotal[motorIndex] := maxDelay[motorIndex]
+    localDelayI[motorIndex] := maxDelay[motorIndex]
+    delayTotalI[motorIndex] := localDelayI[motorIndex]
+   
+    iFactor[motorIndex] := nNum[motorIndex] / nDenom[motorIndex]
+    Pst.str(string(11, 13, "delay["))
+    Pst.Dec(motorIndex)
+    Pst.str(string("][0] = "))
+    Pst.Dec(localDelay[motorIndex])
+    Pst.str(string(11, 13, "minDelay["))
+    Pst.Dec(motorIndex)
+    Pst.str(string("] = "))
+    Pst.Dec(minDelay[motorIndex])
+    Pst.str(string(11, 13, "maxDelay["))
+    Pst.Dec(motorIndex)
+    Pst.str(string("] = "))
+    Pst.Dec(maxDelay[motorIndex])
+    Pst.str(string(11, 13, "nNum["))
+    Pst.Dec(motorIndex)
+    Pst.str(string("] = "))
+    Pst.Dec(nNum[motorIndex])
+    Pst.str(string(11, 13, "nDenom["))
+    Pst.Dec(motorIndex)
+    Pst.str(string("] = "))
+    Pst.Dec(nDenom[motorIndex])
+    Pst.str(string(11, 13, "iFactor["))
+    Pst.Dec(motorIndex)
+    Pst.str(string("] = "))
+    Pst.Dec(iFactor[motorIndex])
+
+  longfill(@finishedFlag, 0, 4)
      
   localIndex := 1
   
@@ -291,59 +319,97 @@ PUB TestMath(fractionGuess, fractionDifference) | localIndex, localDelay[2], pre
       if finishedFlag[motorIndex]
         next
       previousDelay[motorIndex] := localDelay[motorIndex]
-      if motorIndex
-        difference := TtaMethod(difference, maxDelay[1], maxDelay[0])
-        difference *= fractionGuess
-        difference /= fractionGuess - fractionDifference
-        'Pst.str(string(11, 13, "fractionGuess = "))
-        'Pst.Dec(fractionGuess)
-      else
-        difference := (2 * localDelay[motorIndex]) / ((4 * localIndex) + 1)
-      localDelay[motorIndex] -= difference
+      difference0 := (2 * localDelay[motorIndex]) / {
+      } (TtaMethod(nNum[motorIndex], localIndex, nDenom[motorIndex]) + 1) <# 1
+      
+      difference1 := (2 * localDelayI[motorIndex]) / ((iFactor[motorIndex] * localIndex) + 1) <# 1
+      localDelay[motorIndex] -= difference0
+      localDelayI[motorIndex] -= difference1
       delayTotal[motorIndex] += localDelay[motorIndex]
-      {Pst.str(string(11, 13, "delay["))
+      delayTotalI[motorIndex] += localDelayI[motorIndex]
+      Pst.str(string(11, 13, "delay["))
       Pst.Dec(motorIndex)
       Pst.str(string("]["))
       Pst.Dec(localIndex)
       Pst.str(string("] = "))
       Pst.Dec(localDelay[motorIndex])
-      Pst.str(string(", difference = "))
-      Pst.Dec(difference)
-      Pst.str(string(", fraction of previous = ")) }
-      result := TtaMethod(localDelay[0], maxDelay[0], previousDelay[0])
+      Pst.str(string(", difference0 = "))
+      Pst.Dec(difference0)
+      Pst.str(string(", delayI = "))
+      Pst.Dec(localDelayI[motorIndex])
+      Pst.str(string(", difference1 = "))
+      Pst.Dec(difference1)
+      'result := TtaMethod(localDelay[0], maxDelay[0], previousDelay[0])
       {Pst.Dec(result)
       Pst.str(string(" / "))
       Pst.Dec(maxDelay[motorIndex])
       Pst.str(string(", total = "))
       Pst.Dec(delayTotal[motorIndex]) }
-      if localDelay[motorIndex] =< minDelay[motorIndex]
-        Pst.str(string(11, 13, "minDelay["))
+      if localDelay[motorIndex] =< minDelay[motorIndex] and finishedFlag[motorIndex] == 0
+        Pst.str(string(11, 13, "I minDelay["))
         Pst.Dec(motorIndex)
         Pst.str(string("] reached in "))
         Pst.Dec(localIndex)
         Pst.str(string(" steps, minDelay = "))
         Pst.Dec(minDelay[motorIndex])
-        Pst.str(string(11, 13, "fractionGuess = "))
-        Pst.Dec(fractionGuess)
+        finalTotal[motorIndex] := delayTotal[motorIndex]
+        finalStepsI[motorIndex] := localIndex 
         finishedFlag[motorIndex] := 1
-        result := localIndex
-        'PressToContinue
-        return
+        PressToContinue
+      if localDelayI[motorIndex] =< minDelay[motorIndex] and finishedFlagI[motorIndex] == 0
+        Pst.str(string(11, 13, "  minDelay["))
+        Pst.Dec(motorIndex)
+        Pst.str(string("] reached in "))
+        Pst.Dec(localIndex)
+        Pst.str(string(" steps, minDelay = "))
+        Pst.Dec(minDelay[motorIndex])
+        finalTotalI[motorIndex] := delayTotalI[motorIndex]
+        finalSteps[motorIndex] := localIndex
+        finishedFlagI[motorIndex] := 1
+        PressToContinue
+
     'Pst.str(string(11, 13, "total[1]/total[0] * 1000 = "))
     'Pst.Dec(TtaMethod(delayTotal[1], 1000, delayTotal[0]))  
     ifnot localIndex // pauseInterval
       PressToContinue
     
     localIndex++  
-  until finishedFlag[0] and finishedFlag[1] 'localDelay[0] > minDelay[0] or localDelay[1] > minDelay[1]
+  until finishedFlag[0] and finishedFlag[1] and finishedFlagI[0] and finishedFlagI[1]
 
- 
+  repeat motorIndex from 0 to 1
+    Pst.str(string(11, 13, "maxDelay["))
+    Pst.Dec(motorIndex)
+    Pst.str(string("] = "))
+    Pst.Dec(maxDelay[motorIndex])
+    Pst.str(string(", minDelay = "))
+    Pst.Dec(minDelay[motorIndex])
+
+    Pst.str(string(11, 13, "finalTotal = "))
+    Pst.Dec(finalTotal[motorIndex])
+    Pst.str(string(", finalTotalI = "))
+    Pst.Dec(finalTotalI[motorIndex])
+    Pst.str(string(11, 13, "finalSteps["))
+    Pst.Dec(motorIndex)
+    Pst.str(string("] = "))
+    Pst.Dec(finalSteps[motorIndex])
+    Pst.str(string(", finalStepsI = "))
+    Pst.Dec(finalStepsI[motorIndex])
+
+    Pst.str(string(11, 13, "nNum["))
+    Pst.Dec(motorIndex)
+    Pst.str(string("] = "))
+    Pst.Dec(nNum[motorIndex])
+    Pst.str(string(", nDenom = "))
+    Pst.Dec(nDenom[motorIndex])
+    Pst.str(string(", iFactor = "))
+    Pst.Dec(iFactor[motorIndex])
+  repeat
   
 DAT
 
 pauseInterval           long 40
 minDelay                long 80_000, 0-0 'US_001 * 1_000
-maxDelay                long 1_600_000, 165_000 'US_001 * 20_000
+maxDelay                long 1_600_000, 3_200_000 'US_001 * 20_000
 
 timeToA                 long 219
 startGuesss             long 2 '64

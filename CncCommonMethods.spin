@@ -1775,6 +1775,10 @@ PUB Get165Value
 
   result := shiftRegisterInput
 
+PUB Get165Address
+
+  result := @shiftRegisterInput
+
 PUB SetSleepDrv8711(sleepAxis, state)
 
   sleepAxis *= Header#CHANNELS_PER_CS
