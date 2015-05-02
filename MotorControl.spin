@@ -47,7 +47,7 @@ PUB Start(address165_) | debugPtr
 
   accelIntervals := ComputeAccelIntervals(maxDelay, minDelay, delayChange)
   
-  repeat result from 0 to 21 'Header#MAX_DEBUG_SPI_INDEX
+  repeat result from 0 to 27 'Header#MAX_DEBUG_SPI_INDEX
     debugAddress0[result] := debugPtr
     debugPtr += 4
     
@@ -122,13 +122,13 @@ PUB MoveSingle(localAxis, localDistance) | spinScratch
     Pst.Str(string(11, 13, "location = ")) ' watch progress
     Pst.Dec(debugAddressF)
     Pst.Str(string(", ")) ' watch progress
-    Pst.Dec(debugAddressE)
+    Pst.Dec(debugLocationClue)
     Pst.Str(string(", fastTotal = ")) ' watch progress
     Pst.Dec(debugAddressA)
     Pst.Str(string(", activeDelay = ")) ' watch progress
-    Pst.Dec(debugAddress1)
+    Pst.Dec(debugActiveDelay)
     Pst.Str(string(" or ")) ' watch progress
-    Pst.Dec(debugAddress1 / 80_000)
+    Pst.Dec(debugActiveDelay / 80_000)
     Pst.Str(string(" ms, delayTotal = ")) ' watch progress
     Pst.Dec(debugAddress3)
     Pst.Str(string(" or ")) ' watch progress
@@ -171,13 +171,40 @@ PUB MoveSingle(localAxis, localDistance) | spinScratch
     
     
                         
-  while command and debugAddressE <> 999            
+  while command and debugLocationClue <> 999        
   Pst.Str(string(11, 13, "full speed steps = "))
   Pst.Dec(result)
   
    
 PUB MoveLine(longAxis, shortAxis, longDistance, shortDistance) | {
-} startDelay[2], accelChange[2] 
+} maxDelayS, minDelayS, delayChangeS
+
+  maxDelayS := Cnc.TtaMethod(||longDistance, maxDelay, ||shortDistance)
+  minDelayS := Cnc.TtaMethod(||longDistance, minDelay, ||shortDistance)
+  delayChangeS := Cnc.TtaMethod(||longDistance, delayChange, ||shortDistance)
+
+  Pst.Str(string(11, 13, "MoveLine("))
+  Pst.Dec(longAxis)
+  Pst.Str(string(", "))
+  Pst.Dec(shortAxis)
+  Pst.Str(string(", "))
+  Pst.Dec(longDistance)
+  Pst.Str(string(", "))
+  Pst.Dec(shortDistance)
+  Pst.Str(string("), accelIntervals = "))
+  Pst.Dec(accelIntervals)
+  Pst.Str(string(11, 13, "startDelay (long) = "))
+  Pst.Dec(maxDelay)
+  Pst.Str(string(", (short) = "))
+  Pst.Dec(maxDelayS)
+  Pst.Str(string(11, 13, "minDelay (long) = "))
+  Pst.Dec(minDelay)
+  Pst.Str(string(", (short) = "))
+  Pst.Dec(minDelayS)
+  Pst.Str(string(11, 13, "delayChange (long) = "))
+  Pst.Dec(delayChange)
+  Pst.Str(string(", (short) = "))
+  Pst.Dec(delayChangeS)
 
   repeat result from 0 to 1
     longAxis[result] := stepMaskX[longAxis[result]]
@@ -186,7 +213,11 @@ PUB MoveLine(longAxis, shortAxis, longDistance, shortDistance) | {
       ||longDistance[result]
     else
       dira[dirPinX[longAxis[result]]] := 1
-      
+    Pst.Str(string(11, 13))
+    Pst.Str(Cnc.FindString(Cnc.GetAxisText, longAxis[result]))
+    Pst.Str(string(" (mask) "))
+    Cnc.ReadableBin(longAxis[result], 32)  
+
   mailbox := @result
 
   SetCommand(Header#DUAL_MOTOR)
@@ -240,33 +271,21 @@ jumpTable               jmp     #smallLoop
 DAT driveOne            rdlong  resultPtr, mailboxAddr                        
                         mov     bufferAddress, resultPtr
                         wrlong  con222, debugAddressF
-                        'wrlong  resultPtr, debugAddress0
                         add     bufferAddress, #4
                         rdlong  fastMask, bufferAddress             
-                        'wrlong  bufferAddress, debugAddress1
-                        'wrlong  shiftOutputChange, debugAddress2
                         add     bufferAddress, #4
                         mov     fastTotal, zero
                         mov     delayTotal, zero
                         'rdlong  slowMask, bufferAddress              
                         'wrlong  bufferAddress, debugAddress3
-                        'wrlong  outputData, debugAddress4
-                        'add     bufferAddress, #4
                         rdlong  fastDistance, bufferAddress             
                         'add     bufferAddress, #4
                         'rdlong  slowDistance, bufferAddress             
-                        'mov     activeHalfDelay, halfMaxDelayCog
                         mov     activeDelay, maxDelayCog
-                        'mov     activeHalfChange, halfDelayChangeCog
                         wrlong  maxDelayCog, debugAddress6
                         mov     activeChange, delayChangeCog
-                        wrlong  activeDelay, debugAddress1
+                        wrlong  activeDelay, debugActiveDelay
                         
-                        'mov     activeHalfMinDelayCog, halfMinDelayCog
-                        'mov     activeMinDelayCog, minDelayCog
-                                      'activeChange
-                                
-                        'andn    outa, fastMask
                                 'cmpsub if d > s write c 
                                 'sub    if d < s write c 
                                 'cmp    if d < s write c
@@ -292,7 +311,7 @@ continueSingleSetup     sub     fullStepsF, accelStepsF
                         add     nextAccelTime, accelIntervalCog
                         
 accelLoopSingle         djnz    accelStepsF, #accelSingleBody
-                        wrlong  con777, debugAddressE 
+                        wrlong  con777, debugLocationClue
                         jmp     #fullSpeedSizeCheck
 ' exit acceleration loop                        
 ' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
@@ -305,7 +324,7 @@ firstPartOfStepA        mov     scratchTime, nextHalfStepTime
                         wrlong  scratchTime, debugAddressC
                         'mov     nextHalfStepTimeS, cnt
                         'wrlong  nextHalfStepTimeS, debugAddressD
-                        wrlong  con111, debugAddressE
+                        wrlong  con111, debugLocationClue
               if_nc     jmp     #firstPartOfStepA
               
                         andn    outa, fastMask
@@ -314,9 +333,9 @@ secondPartOfStepA       mov     scratchTime, nextStepTime
                         sub     scratchTime, cnt wc
                         'cmp     nextStepTime, cnt wc
                         wrlong  scratchTime, debugAddressC
-                        wrlong  con222, debugAddressE
+                        wrlong  con222, debugLocationClue
               if_nc     jmp     #secondPartOfStepA
-                        wrlong  con771, debugAddressE
+                        wrlong  con771, debugLocationClue
                         mov     scratchTime, nextAccelTime
                         sub     scratchTime, cnt wc
                         'cmp     nextAccelTime, cnt wc ' check if acceleration time
@@ -328,17 +347,15 @@ decreaseDelay           sub     activeDelay, activeChange
                         mov     scratchTime, activeDelay
                         shr     scratchTime, #1
                         sub     nextHalfStepTime, scratchTime
-                        wrlong  activeDelay, debugAddress1
+                        wrlong  activeDelay, debugActiveDelay
                         add     nextAccelTime, accelIntervalCog
                         jmp     #accelLoopSingle
-                        'cmp     activeDelay, minDelayCog wc wz
-          'if_nc_and_nz  jmp     #decelSingleEnter
-
+                        
 ' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 ' begin full speed
 fullSpeedSizeCheck      mov     lastAccelDelay, activeDelay
                         'mov     lastAccelHalfDelay, activeHalfDelay
-                        wrlong  con999, debugAddressE
+                        wrlong  con999, debugLocationClue
                         wrlong  fullStepsF, debugAddress4
                         'jmp     #$
 ' Remember last acceleration delay so the decel delays calculate correctly.
@@ -354,7 +371,7 @@ fullSpeedSizeCheck      mov     lastAccelDelay, activeDelay
                         sub     nextHalfStepTime, scratchTime
                         
 fullSpeedLoopEnter      wrlong  con554, debugAddressF
-                        wrlong  activeDelay, debugAddress1
+                        wrlong  activeDelay, debugActiveDelay
 fullSpeedLoop           djnz    fullStepsF, #fullSpeedSingleBody ' awkward code
 ' We previously added one to fullStepsF so this fist djnz doesn't mess out the step count.
                         wrlong  con556, debugAddressF
@@ -368,7 +385,7 @@ fullSpeedSingleBody     call    #stepFastHigh
 firstPartOfStepFull     mov     scratchTime, nextHalfStepTime
                         sub     scratchTime, cnt wc
                         'cmp     nextHalfStepTime, cnt wc  ' ** use waitcnt instead?
-                        wrlong  con338, debugAddressE
+                        wrlong  con338, debugLocationClue
               if_nc     jmp     #firstPartOfStepFull
               
                         andn    outa, fastMask
@@ -376,9 +393,9 @@ firstPartOfStepFull     mov     scratchTime, nextHalfStepTime
 secondPartOfStepFull    mov     scratchTime, nextStepTime
                         sub     scratchTime, cnt wc
                         'cmp     nextStepTime, cnt wc
-                        wrlong  con448, debugAddressE
+                        wrlong  con448, debugLocationClue
               if_nc     jmp     #secondPartOfStepFull
-                        wrlong  con888, debugAddressE
+                        wrlong  con888, debugLocationClue
                         jmp     #fullSpeedLoop
                         
 ' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
@@ -407,7 +424,7 @@ decelSingleBody         call    #stepFastHigh
 firstPartOfStepD        mov     scratchTime, nextHalfStepTime
                         sub     scratchTime, cnt wc
                         'cmp     nextHalfStepTime, cnt wc  ' ** use waitcnt instead?
-                        wrlong  con555, debugAddressE
+                        wrlong  con555, debugLocationClue
               if_nc     jmp     #firstPartOfStepD
               
                         andn    outa, fastMask
@@ -415,10 +432,10 @@ firstPartOfStepD        mov     scratchTime, nextHalfStepTime
 secondPartOfStepD       mov     scratchTime, nextStepTime
                         sub     scratchTime, cnt wc
                         'cmp     nextStepTime, cnt wc
-                        wrlong  con666, debugAddressE
+                        wrlong  con666, debugLocationClue
               if_nc     jmp     #secondPartOfStepD
 
-                        wrlong  con999, debugAddressE
+                        wrlong  con999, debugLocationClue
               
                         mov     scratchTime, nextAccelTime
                         sub     scratchTime, cnt wc
@@ -430,7 +447,7 @@ increaseDelay           add     activeDelay, activeChange
                         mov     scratchTime, activeDelay
                         shr     scratchTime, #1
                         sub     nextHalfStepTime, scratchTime
-                        wrlong  activeDelay, debugAddress1
+                        wrlong  activeDelay, debugActiveDelay
                         add     nextAccelTime, accelIntervalCog
                         jmp     #decelLoopSingle
                         
@@ -487,29 +504,218 @@ stepSlowHigh            or      outa, slowMask
 stepSlowHigh_ret        ret
 '------------------------------------------------------------------------------
 '------------------------------------------------------------------------------
-driveTwo                rdlong  resultPtr, mailboxAddr                        
+DAT driveTwo            rdlong  resultPtr, mailboxAddr                        
                         mov     bufferAddress, resultPtr
                         'wrlong  con222, debugAddressF
-                        'wrlong  resultPtr, debugAddress0
                         add     bufferAddress, #4
                         rdlong  fastMask, bufferAddress             
-                        'wrlong  bufferAddress, debugAddress1
-                        'wrlong  shiftOutputChange, debugAddress2
                         add     bufferAddress, #4
-                        'mov     stepDelay, bitDelay
+                        mov     fastTotal, zero
+                        mov     delayTotal, zero
                         rdlong  slowMask, bufferAddress              
-                        'wrlong  bufferAddress, debugAddress3
-                        'wrlong  outputData, debugAddress4
                         add     bufferAddress, #4
+                        'wrlong  bufferAddress, debugAddress3
                         rdlong  fastDistance, bufferAddress             
                         add     bufferAddress, #4
                         rdlong  slowDistance, bufferAddress             
+                        add     bufferAddress, #4
+                        rdlong  slowDistance, bufferAddress             
+                        add     bufferAddress, #4
+                        rdlong  activeDelayS, bufferAddress 
+                        add     bufferAddress, #4
+                        rdlong  minDelayCogS, bufferAddress 
+                        add     bufferAddress, #4
+                        rdlong  delayChangeCogS, bufferAddress 
+
+                        mov     activeDelay, maxDelayCog
+                        wrlong  maxDelayCog, debugAddress6
+                        wrlong  activeDelay, debugActiveDelay
+                                'cmpsub if d > s write c 
+                                'sub    if d < s write c 
+                                'cmp    if d < s write c
+                                'cmps   if d < s write c signed
+                       {longAxis, shortAxis, longDistance, shortDistance) | {
+} maxDelayS, minDelayS, delayChangeS }
+                        mov     fullStepsF, fastDistance        
+                        cmp     fullStepsF, doubleAccel wc
+              if_nc     jmp     #setFullSpeedDualSteps                
+              if_c      jmp     #setLowSpeedDualSteps
+
+continueDualSetup       sub     fullStepsF, accelStepsF
+                        sub     fullStepsF, decelStepsF
+                        add     fullStepsF, #1
+                        add     accelStepsF, #1
+                        add     decelStepsF, #1
+                        mov     accelStage, #3
                         
-                        andn    outa, fastMask
-                        andn    outa, slowMask
-                     
+setupAccel              neg     activeChange, delayChangeCog  ' add a negative number to accel
+                        neg     activeChangeS, delayChangeCogS 
+                        mov     stepCountdown, accelStepsF
+' Add one to fullStepsF other acceleration steps to allow the use of djnz later.
+                                         
+                        'mov     stepDelay, activeHalfDelay
+                       
+                        mov     nextAccelTime, cnt
+                        mov     nextStepTime, nextAccelTime
+                        mov     nextHalfStepTime, nextAccelTime
+                        sub     nextHalfStepTime, halfMaxDelayCog
+
+                        mov     nextStepTimeS, nextAccelTime
+                        mov     nextHalfStepTimeS, nextAccelTime
+                        mov     scratchTime, activeDelayS
+                        shr     scratchTime, #1
+                        sub     nextHalfStepTimeS, scratchTime
+
+                        add     nextAccelTime, accelIntervalCog
+                      
+                        
+dualLoop                djnz    stepCountdown, #dualBody
+                        wrlong  con777, debugLocationClue
+                        djnz    accelStage, #nextStage
+                        jmp     #finalDual
+nextStage               cmp     accelStage, #2 wz
+              if_z      jmp     #setupFullSpeedDual '"setupFullSpeedDual" returns to dualLoop 
+                        jmp     #setupDecelDual  'accelStage equals one
+                                '"setupDecelDual" returns to dualLoop
+' exit acceleration loop                        
+' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+                        
+'accelDualBody           call    #stepFastHigh
+'                                                
+dualBody                mov     scratchTime, nextHalfStepTime
+                        sub     scratchTime, cnt wc
+                        wrlong  scratchTime, debugAddressC
+                        wrlong  con111, debugLocationClue
+              if_c      call    #stepFastLow2
+                        mov     scratchTime, nextHalfStepTimeS
+                        sub     scratchTime, cnt wc
+              if_c      call    #stepSlowLow2
+                        mov     scratchTime, nextStepTimeS
+                        sub     scratchTime, cnt wc
+              if_c      call    #stepSlowHigh2
+                        mov     scratchTime, nextStepTime
+                        sub     scratchTime, cnt wc
+              if_c      call    #stepFastHigh2
+                        mov     scratchTime, nextAccelTime
+                        sub     scratchTime, cnt wc
+              if_nc     jmp     #dualLoop
+              
+                        adds    activeDelay, activeChange ' activeChange may be zero, positive or negative
+                        tjz     activeChange, #adjustSlowDelay ' optional
+                        mov     nextHalfStepTime, nextStepTime
+                        mov     scratchTime, activeDelay
+                        shr     scratchTime, #1
+                        sub     nextHalfStepTime, scratchTime
+
+adjustSlowDelay         adds    activeDelayS, activeChangeS
+                        tjz     activeChangeS, #advanceAccelInterrupt ' optional
+                        mov     nextHalfStepTimeS, nextStepTimeS
+                        mov     scratchTime, activeDelayS
+                        shr     scratchTime, #1
+                        sub     nextHalfStepTimeS, scratchTime
+
+                        wrlong  activeDelay, debugActiveDelay
+advanceAccelInterrupt   add     nextAccelTime, accelIntervalCog
+                        jmp     #dualLoop
+
+
+' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+finalDual               wrlong  con999, debugAddressF
                         jmp     #mainPasmLoop
 
+'------------------------------------------------------------------------------
+setFullSpeedDualSteps   mov     accelStepsF, accelIntervalsCog
+                        mov     decelStepsF, accelIntervalsCog
+                        'mov     fullStepsF, fastDistance
+                        mov     shortFlag, zero
+                        wrlong  con333, debugAddressF
+                        jmp     #continueDualSetup
+'------------------------------------------------------------------------------
+setLowSpeedDualSteps    mov     accelStepsF, fastDistance
+                        shr     accelStepsF, #1
+                        mov     decelStepsF, accelStepsF
+                        mov     shortFlag, #1
+                        wrlong  con444, debugAddressF
+                        jmp     #continueDualSetup
+
+'------------------------------------------------------------------------------
+setupFullSpeedDual      mov     activeChange, zero
+                        mov     activeChangeS, zero
+                        mov     stepCountdown, fullStepsF
+                        mov     lastAccelDelay, activeDelay 
+                        mov     lastAccelDelayS, activeDelayS
+                        wrlong  activeDelay, debugActiveDelay
+                        tjnz    shortFlag, #dualLoop  ' present delays okay
+                        
+' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+' setup full speed with full acceleration intervals, adjust delays for max speed
+
+                        mov     activeDelay, minDelayCog 
+                        mov     nextHalfStepTime, nextStepTime
+                        mov     scratchTime, activeDelay
+                        shr     scratchTime, #1
+                        sub     nextHalfStepTime, scratchTime
+                        
+                        mov     activeDelayS, minDelayCogS
+                        mov     nextHalfStepTimeS, nextStepTimeS
+                        mov     scratchTime, activeDelayS
+                        shr     scratchTime, #1
+                        sub     nextHalfStepTimeS, scratchTime
+                        jmp     #dualLoop
+
+'------------------------------------------------------------------------------
+setupDecelDual          mov     activeChange, delayChangeCog
+                        mov     activeChangeS, delayChangeCogS
+                        mov     stepCountdown, decelStepsF
+                         
+                        tjnz    shortFlag, #dualLoop  ' present delays okay
+                        
+' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+' setup deceleration from full speed, adjust delays back to last acceleration delays
+
+                        mov     activeDelay, lastAccelDelay 
+                        mov     nextHalfStepTime, nextStepTime
+                        mov     scratchTime, activeDelay
+                        shr     scratchTime, #1
+                        sub     nextHalfStepTime, scratchTime
+                        
+                        mov     activeDelayS, lastAccelDelayS
+                        mov     nextHalfStepTimeS, nextStepTimeS
+                        mov     scratchTime, activeDelayS
+                        shr     scratchTime, #1
+                        sub     nextHalfStepTimeS, scratchTime
+                        jmp     #dualLoop
+ 
+'------------------------------------------------------------------------------
+DAT stepFastHigh2       or      outa, fastMask
+                        add     nextHalfStepTime, activeDelay
+                        wrlong  nextHalfStepTime, debugNextHalfTime
+                        add     delayTotal, activeDelay
+                        wrlong  delayTotal, debugAddress3
+                        wrlong  fullStepsF, debugFullSpeedSteps
+                        wrlong  accelStepsF, debugAccelSteps
+stepFastHigh2_ret       ret
+'------------------------------------------------------------------------------
+stepFastLow2            andn    outa, fastMask
+                        wrlong  decelStepsF, debugDecelSteps                          
+                        add     nextStepTime, activeDelay
+                        wrlong  nextStepTime, debugNextStepTime
+                        add     fastTotal, #1
+                        wrlong  fastTotal, debugAddressA 
+stepFastLow2_ret        ret
+'------------------------------------------------------------------------------
+stepSlowHigh2           or      outa, slowMask
+                        add     nextHalfStepTimeS, activeDelayS
+                        add     delayTotalS, activeDelayS
+                        wrlong  delayTotalS, debugSlowTotalDelay
+stepSlowHigh2_ret       ret                        
+'------------------------------------------------------------------------------
+stepSlowLow2            andn    outa, slowMask
+                        add     nextStepTimeS, activeDelayS
+                        add     slowTotal, #1
+                        wrlong  slowTotal, debugSlowTotal
+stepSlowLow2_ret        ret                        
 '------------------------------------------------------------------------------
 driveThree              jmp     #mainPasmLoop         
 '------------------------------------------------------------------------------
@@ -521,7 +727,9 @@ DAT newParameters       rdlong  maxDelayCog, maxDelayAddr
                         shr     halfMinDelayCog, #1                    
                         rdlong  delayChangeCog, delayChangeAddr 
                         'mov     halfDelayChangeCog, delayChangeCog
-                        'shr     halfDelayChangeCog, #1            
+                        'shr     halfDelayChangeCog, #1
+                        'neg     negativeChange, delayChangeCog
+                                    
                         rdlong  accelIntervalCog, accelIntervalAddr 
                         rdlong  accelIntervalsCog, accelIntervalsAddr
                         mov     doubleAccel, accelIntervalsCog
@@ -647,7 +855,7 @@ stepMask                long 1 << Header#STEP_X_PIN | 1 << Header#STEP_Y_PIN | 1
 testBufferPtr           long 0-0
 address165              long 0-0
 debugAddress0           long 0-0
-debugAddress1           long 0-0
+debugActiveDelay        long 0-0
 debugAddress2           long 0-0
 debugAddress3           long 0-0
 debugAddress4           long 0-0
@@ -660,14 +868,20 @@ debugAddressA           long 0-0
 debugAddressB           long 0-0
 debugAddressC           long 0-0
 debugAddressD           long 0-0
-debugAddressE           long 0-0
+debugLocationClue       long 0-0
 debugAddressF           long 0-0
 debugAccelSteps         long 0-0
 debugDecelSteps         long 0-0
 debugFullSpeedSteps     long 0-0
 debugNextStepTime       long 0-0
-debugAddressK           long 0-0
-debugAddressL           long 0-0 '21
+debugSlowTotalDelay     long 0-0
+debugSlowTotal          long 0-0 '21
+debugAddressM           long 0-0 
+debugAddressN           long 0-0 
+debugAddressO           long 0-0 
+debugAddressP           long 0-0 
+debugAddressQ           long 0-0 
+debugAddressR           long 0-0 '27
 
 stepDelay               res 1
 wait                    res 1
@@ -733,7 +947,7 @@ delayTotalS             res 1
 fastDistance            res 1
 slowDistance            res 1
 nextAccelTime           res 1
-nextAccelTimeS          res 1
+'nextAccelTimeS          res 1
 nextStepTime            res 1
 nextStepTimeS           res 1
 nextHalfStepTime        res 1
@@ -746,6 +960,11 @@ shortFlag               res 1
 minHalfDelayCog         res 1
 minHalfDelayCogS        res 1
 scratchTime             res 1
+minDelayCogS            res 1
+accelStage              res 1
+'negativeChange          res 1
+delayChangeCogS         res 1
+stepCountdown           res 1
                         fit
 
 DAT
