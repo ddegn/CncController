@@ -278,7 +278,7 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
       'waitcnt(clkfreq * 3 + cnt)
       return
     'PressToContinue  
-    
+    {
     Spi.clearDisplay
                                '0123456789012345
     Spi.write4x16String(String("Based on code"), strsize(String("Based on code")), 2, 0)
@@ -292,7 +292,7 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
 
     if WatchForChange(@oledState, frozenState, 3_000)
       return
-    
+        }
     {Spi.write1x8String(String("Parallax"), strsize(String("Parallax")))
     Spi.write2x8String(String("Prop"), strsize(String("Prop")), 1)
     FitBitmap(Spi.getBuffer, 128, 64, @propBeanie, 32, 32, 96, 32, false)

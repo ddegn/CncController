@@ -14,10 +14,10 @@ DAT
 command                 long 0
 mailbox                 long 0
 
-maxDelay                long 80_000 * 50
-minDelay                long 80_000
-delayChange             long 8_000
-accelInterval           long 40_000
+maxDelay                long 80_000 * 5 '80_000 * 50
+minDelay                long 80_000 '80_000
+delayChange             long 800 '8_000
+accelInterval           long 40_000 '' *** This might be a problem.
 accelIntervals          long 0-0
 
 'debugAddress            long 0-0
@@ -47,7 +47,7 @@ PUB Start(address165_) | debugPtr
 
   accelIntervals := ComputeAccelIntervals(maxDelay, minDelay, delayChange)
   
-  repeat result from 0 to Header#MAX_DEBUG_SPI_INDEX
+  repeat result from 0 to 21 'Header#MAX_DEBUG_SPI_INDEX
     debugAddress0[result] := debugPtr
     debugPtr += 4
     
@@ -133,8 +133,9 @@ PUB MoveSingle(localAxis, localDistance) | spinScratch
     Pst.Dec(debugAddress3)
     Pst.Str(string(" or ")) ' watch progress
     Pst.Dec(debugAddress3 / 80_000)
-    Pst.Str(string(" ms")) ' watch progress
-
+    Pst.Str(string(" ms  ")) ' watch progress
+    Pst.Dec(debugAccelSteps)
+    
     Pst.Str(string(11, 13, "maxDelayCog = ")) ' watch progress
     Pst.Dec(debugAddress6)
     Pst.Str(string(", PASM scratchTime = ")) ' watch progress
@@ -144,12 +145,32 @@ PUB MoveSingle(localAxis, localDistance) | spinScratch
     Pst.Str(string(", scratchTime (accel) = ")) ' watch progress
     Pst.Dec(debugAddressD)
     Pst.Str(string(11, 13, "Spin scratchTime = ")) ' watch progress
-    spinScratch := debugAddress8 - cnt
+    spinScratch := debugNextHalfTime - cnt
     Pst.Dec(spinScratch)
     Pst.Str(string(" or ")) ' watch progress
     Pst.Dec(spinScratch / 80_000)
     Pst.Str(string(" ms")) ' watch progress
+       
+    Pst.Str(string(11, 13, "accelStepsF = ")) ' watch progress
+    Pst.Dec(debugAccelSteps)   
+    Pst.Str(string(", fullStepsF = ")) ' watch progress
+    Pst.Dec(debugFullSpeedSteps)   
+    Pst.Str(string(", decelStepsF = ")) ' watch progress
+    Pst.Dec(debugDecelSteps)   
+    Pst.Str(string(", a+f+d = ")) ' watch progress
+    Pst.Dec(debugAccelSteps + debugFullSpeedSteps + debugDecelSteps)   
+    Pst.Str(string(", localDistance = ")) ' watch progress
+    Pst.Dec(localDistance)   
+
+    Pst.Str(string(11, 13, "debugHalfTime = ")) ' watch progress
+    Pst.Dec(debugNextHalfTime)   
+    Pst.Str(string(", nextStepTime = ")) ' watch progress
+    Pst.Dec(debugNextStepTime)   
+    Pst.Str(string(", next - half = ")) ' watch progress
+    Pst.Dec(debugNextStepTime - debugNextHalfTime)   
     
+    
+                        
   while command and debugAddressE <> 999            
   Pst.Str(string(11, 13, "full speed steps = "))
   Pst.Dec(result)
@@ -303,7 +324,10 @@ secondPartOfStepA       mov     scratchTime, nextStepTime
               if_nc     jmp     #accelLoopSingle
 
 decreaseDelay           sub     activeDelay, activeChange
-                        'sub     activeHalfDelay, activeHalfChange
+                        mov     nextHalfStepTime, nextStepTime
+                        mov     scratchTime, activeDelay
+                        shr     scratchTime, #1
+                        sub     nextHalfStepTime, scratchTime
                         wrlong  activeDelay, debugAddress1
                         add     nextAccelTime, accelIntervalCog
                         jmp     #accelLoopSingle
@@ -315,6 +339,7 @@ decreaseDelay           sub     activeDelay, activeChange
 fullSpeedSizeCheck      mov     lastAccelDelay, activeDelay
                         'mov     lastAccelHalfDelay, activeHalfDelay
                         wrlong  con999, debugAddressE
+                        wrlong  fullStepsF, debugAddress4
                         'jmp     #$
 ' Remember last acceleration delay so the decel delays calculate correctly.
                                                                                                         
@@ -323,37 +348,47 @@ fullSpeedSizeCheck      mov     lastAccelDelay, activeDelay
 
 ' The code below is used is full speed is reached in the acceleration section.                        
                         mov     activeDelay, minDelayCog
-                    
-                        'mov     activeHalfDelay, minHalfDelayCog
+                        mov     nextHalfStepTime, nextStepTime
+                        mov     scratchTime, activeDelay
+                        shr     scratchTime, #1
+                        sub     nextHalfStepTime, scratchTime
                         
-fullSpeedLoopEnter      wrlong  con555, debugAddressF
+fullSpeedLoopEnter      wrlong  con554, debugAddressF
                         wrlong  activeDelay, debugAddress1
-fullSpeedLoop           djnz fullStepsF, #fullSpeedSingleBody ' awkward code
+fullSpeedLoop           djnz    fullStepsF, #fullSpeedSingleBody ' awkward code
 ' We previously added one to fullStepsF so this fist djnz doesn't mess out the step count.
+                        wrlong  con556, debugAddressF
                         jmp     #decelSingleEnter
 ' exit full speed loop
 ' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
 
 fullSpeedSingleBody     call    #stepFastHigh
-
-firstPartOfStepFull     cmp     nextHalfStepTime, cnt wc  ' ** use waitcnt instead?
+                        wrlong  con557, debugAddressF
+firstPartOfStepFull     mov     scratchTime, nextHalfStepTime
+                        sub     scratchTime, cnt wc
+                        'cmp     nextHalfStepTime, cnt wc  ' ** use waitcnt instead?
                         wrlong  con338, debugAddressE
               if_nc     jmp     #firstPartOfStepFull
               
                         andn    outa, fastMask
-                        
-secondPartOfStepFull    cmp     nextStepTime, cnt wc
+                        wrlong  con558, debugAddressF
+secondPartOfStepFull    mov     scratchTime, nextStepTime
+                        sub     scratchTime, cnt wc
+                        'cmp     nextStepTime, cnt wc
                         wrlong  con448, debugAddressE
               if_nc     jmp     #secondPartOfStepFull
                         wrlong  con888, debugAddressE
-                        jmp     fullSpeedLoop
+                        jmp     #fullSpeedLoop
                         
 ' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 ' decelerate
 
 decelSingleEnter        wrlong  con772, debugAddressF
                         mov     activeDelay, lastAccelDelay
+                        'debugAddress4
+                        'jmp     #$
+''**************************************************************                       
                         'mov     activeHalfDelay, lastAccelHalfDelay
                         mov     nextAccelTime, nextStepTime ' ** not sure about timing
                         'mov     nextAccelTime, nextStepTime ' ** not sure about timing
@@ -369,23 +404,32 @@ decelLoopSingle         djnz    decelStepsF, #decelSingleBody
  
 decelSingleBody         call    #stepFastHigh
 
-firstPartOfStepD        cmp     nextHalfStepTime, cnt wc  ' ** use waitcnt instead?
+firstPartOfStepD        mov     scratchTime, nextHalfStepTime
+                        sub     scratchTime, cnt wc
+                        'cmp     nextHalfStepTime, cnt wc  ' ** use waitcnt instead?
                         wrlong  con555, debugAddressE
               if_nc     jmp     #firstPartOfStepD
               
                         andn    outa, fastMask
                         
-secondPartOfStepD       cmp     nextStepTime, cnt wc
+secondPartOfStepD       mov     scratchTime, nextStepTime
+                        sub     scratchTime, cnt wc
+                        'cmp     nextStepTime, cnt wc
                         wrlong  con666, debugAddressE
               if_nc     jmp     #secondPartOfStepD
 
                         wrlong  con999, debugAddressE
               
-                        cmp     nextAccelTime, cnt wc ' check if acceleration time
+                        mov     scratchTime, nextAccelTime
+                        sub     scratchTime, cnt wc
+                        'cmp     nextAccelTime, cnt wc ' check if acceleration time
               if_nc     jmp     #decelLoopSingle'cceleration
 
 increaseDelay           add     activeDelay, activeChange
-                        'add     activeHalfDelay, activeHalfChange
+                        mov     nextHalfStepTime, nextStepTime
+                        mov     scratchTime, activeDelay
+                        shr     scratchTime, #1
+                        sub     nextHalfStepTime, scratchTime
                         wrlong  activeDelay, debugAddress1
                         add     nextAccelTime, accelIntervalCog
                         jmp     #decelLoopSingle
@@ -419,10 +463,16 @@ setupNextStep
 '------------------------------------------------------------------------------
 DAT stepFastHigh        or      outa, fastMask
                         add     nextHalfStepTime, activeDelay 'activeHalfDelay
-                        wrlong  nextHalfStepTime, debugAddress8
+                        wrlong  nextHalfStepTime, debugNextHalfTime
                         add     delayTotal, activeDelay
                         wrlong  delayTotal, debugAddress3
+                        wrlong  fullStepsF, debugFullSpeedSteps
+                        wrlong  accelStepsF, debugAccelSteps
+                        wrlong  decelStepsF, debugDecelSteps
+                                
                         add     nextStepTime, activeDelay
+                        wrlong  nextStepTime, debugNextStepTime
+                        
                         add     fastTotal, #1
                         wrlong  fastTotal, debugAddressA 'totalFromPasmFastPtr
 stepFastHigh_ret        ret
@@ -578,7 +628,12 @@ con333                  long 333
 con338                  long 338
 con444                  long 444
 con448                  long 448
+con554                  long 554
 con555                  long 555
+con556                  long 556
+con557                  long 557
+con558                  long 558
+con559                  long 559
 con666                  long 666
 con771                  long 771
 con772                  long 772
@@ -599,7 +654,7 @@ debugAddress4           long 0-0
 debugAddress5           long 0-0
 debugAddress6           long 0-0
 debugAddress7           long 0-0
-debugAddress8           long 0-0
+debugNextHalfTime       long 0-0
 debugAddress9           long 0-0
 debugAddressA           long 0-0
 debugAddressB           long 0-0
@@ -607,6 +662,12 @@ debugAddressC           long 0-0
 debugAddressD           long 0-0
 debugAddressE           long 0-0
 debugAddressF           long 0-0
+debugAccelSteps         long 0-0
+debugDecelSteps         long 0-0
+debugFullSpeedSteps     long 0-0
+debugNextStepTime       long 0-0
+debugAddressK           long 0-0
+debugAddressL           long 0-0 '21
 
 stepDelay               res 1
 wait                    res 1

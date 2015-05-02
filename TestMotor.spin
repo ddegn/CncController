@@ -166,7 +166,7 @@ PUB MainLoop | axisIndex
   
   repeat
     Cnc.PressToContinue
-    result += 400
+    result += 1600
     Pst.str(string(11, 13, "Driving "))
     Pst.str(Cnc.FindString(@axesText, axisIndex))
     Pst.str(string(" motor "))
