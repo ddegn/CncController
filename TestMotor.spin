@@ -160,19 +160,26 @@ PUB Setup(parameter0, parameter1) | cncCog
   MainLoop
 
 
-PUB MainLoop | axisIndex
+PUB MainLoop | axisIndex, distance[2]
 
   axisIndex := 0
+  longfill(@distance, 0, 2)
   
   repeat
     Cnc.PressToContinue
-    result += 1600
+    distance[0] += 1600
+    distance[1] += 900
     Pst.str(string(11, 13, "Driving "))
-    Pst.str(Cnc.FindString(@axesText, axisIndex))
+    Pst.str(Cnc.FindString(@axesText, 0))
     Pst.str(string(" motor "))
-    Pst.Dec(result)
+    Pst.Dec(distance[0])
+    Pst.str(string(" steps and "))
+    Pst.str(Cnc.FindString(@axesText, 1))
+    Pst.str(string(" motor "))
+    Pst.Dec(distance[1])
     Pst.str(string(" steps."))
-    Motor.MoveSingle(axisIndex, result)
+    'Motor.MoveSingle(axisIndex, result)
+    Motor.MoveLine(0, 1, distance[0], distance[1])
     'axisIndex++
     if axisIndex > 2
       axisIndex := 0

@@ -218,6 +218,8 @@ PUB MoveLine(longAxis, shortAxis, longDistance, shortDistance) | {
     Pst.Str(string(" (mask) "))
     Cnc.ReadableBin(longAxis[result], 32)  
 
+  Cnc.PressToContinue
+  
   mailbox := @result
 
   SetCommand(Header#DUAL_MOTOR)
@@ -569,20 +571,20 @@ setupAccel              neg     activeChange, delayChangeCog  ' add a negative n
                         add     nextAccelTime, accelIntervalCog
                       
                         
-dualLoop                djnz    stepCountdown, #dualBody
+{dualLoop                djnz    stepCountdown, #dualBody
                         wrlong  con777, debugLocationClue
                         djnz    accelStage, #nextStage
                         jmp     #finalDual
 nextStage               cmp     accelStage, #2 wz
               if_z      jmp     #setupFullSpeedDual '"setupFullSpeedDual" returns to dualLoop 
-                        jmp     #setupDecelDual  'accelStage equals one
+                        jmp     #setupDecelDual } 'accelStage equals one
                                 '"setupDecelDual" returns to dualLoop
 ' exit acceleration loop                        
 ' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
                         
 'accelDualBody           call    #stepFastHigh
 '                                                
-dualBody                mov     scratchTime, nextHalfStepTime
+dualLoop                mov     scratchTime, nextHalfStepTime
                         sub     scratchTime, cnt wc
                         wrlong  scratchTime, debugAddressC
                         wrlong  con111, debugLocationClue
@@ -595,27 +597,27 @@ dualBody                mov     scratchTime, nextHalfStepTime
               if_c      call    #stepSlowHigh2
                         mov     scratchTime, nextStepTime
                         sub     scratchTime, cnt wc
-              if_c      call    #stepFastHigh2
-                        mov     scratchTime, nextAccelTime
+              if_c      jmp     #countdownSteps 'stepFastHigh2
+              
+checkForAcceleration    mov     scratchTime, nextAccelTime
                         sub     scratchTime, cnt wc
               if_nc     jmp     #dualLoop
               
+                        add     nextAccelTime, accelIntervalCog
+                        tjz     activeChange, #dualLoop ' optional
                         adds    activeDelay, activeChange ' activeChange may be zero, positive or negative
-                        tjz     activeChange, #adjustSlowDelay ' optional
                         mov     nextHalfStepTime, nextStepTime
                         mov     scratchTime, activeDelay
                         shr     scratchTime, #1
                         sub     nextHalfStepTime, scratchTime
 
 adjustSlowDelay         adds    activeDelayS, activeChangeS
-                        tjz     activeChangeS, #advanceAccelInterrupt ' optional
                         mov     nextHalfStepTimeS, nextStepTimeS
                         mov     scratchTime, activeDelayS
                         shr     scratchTime, #1
                         sub     nextHalfStepTimeS, scratchTime
 
                         wrlong  activeDelay, debugActiveDelay
-advanceAccelInterrupt   add     nextAccelTime, accelIntervalCog
                         jmp     #dualLoop
 
 
@@ -669,7 +671,7 @@ setupDecelDual          mov     activeChange, delayChangeCog
                         mov     activeChangeS, delayChangeCogS
                         mov     stepCountdown, decelStepsF
                          
-                        tjnz    shortFlag, #dualLoop  ' present delays okay
+                        tjnz    shortFlag, #stepFastHigh2  ' present delays okay
                         
 ' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 ' setup deceleration from full speed, adjust delays back to last acceleration delays
@@ -685,17 +687,25 @@ setupDecelDual          mov     activeChange, delayChangeCog
                         mov     scratchTime, activeDelayS
                         shr     scratchTime, #1
                         sub     nextHalfStepTimeS, scratchTime
-                        jmp     #dualLoop
+                        jmp     #stepFastHigh2
  
 '------------------------------------------------------------------------------
-DAT stepFastHigh2       or      outa, fastMask
+DAT countdownSteps      djnz    stepCountdown, #stepFastHigh2
+                        wrlong  con777, debugLocationClue
+                        djnz    accelStage, #nextStage
+                        jmp     #finalDual
+nextStage               cmp     accelStage, #2 wz
+              if_z      jmp     #setupFullSpeedDual '"setupFullSpeedDual" returns to dualLoop 
+                        jmp     #setupDecelDual  'accelStage equals one
+
+stepFastHigh2           or      outa, fastMask
                         add     nextHalfStepTime, activeDelay
                         wrlong  nextHalfStepTime, debugNextHalfTime
                         add     delayTotal, activeDelay
                         wrlong  delayTotal, debugAddress3
                         wrlong  fullStepsF, debugFullSpeedSteps
                         wrlong  accelStepsF, debugAccelSteps
-stepFastHigh2_ret       ret
+                        jmp     #checkForAcceleration
 '------------------------------------------------------------------------------
 stepFastLow2            andn    outa, fastMask
                         wrlong  decelStepsF, debugDecelSteps                          
