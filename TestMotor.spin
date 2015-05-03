@@ -168,7 +168,7 @@ PUB MainLoop | axisIndex, distance[2]
   repeat
     Cnc.PressToContinue
     distance[0] += 1600
-    distance[1] += 900
+    distance[1] += 800
     Pst.str(string(11, 13, "Driving "))
     Pst.str(Cnc.FindString(Cnc.GetAxisText, 0))
     Pst.str(string(" motor "))

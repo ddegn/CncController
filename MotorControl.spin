@@ -679,21 +679,19 @@ DAT driveTwo            rdlong  resultPtr, mailboxAddr
                         rdlong  fastMask, bufferAddress             
                         add     bufferAddress, #4
                         mov     fastTotal, zero
-                        mov     delayTotal, zero
                         rdlong  slowMask, bufferAddress              
+                        mov     delayTotal, zero
                         add     bufferAddress, #4
                         'wrlong  bufferAddress, debugDelayTotal
                         rdlong  fastDistance, bufferAddress             
                         add     bufferAddress, #4
-                        rdlong  slowDistance, bufferAddress             
-                        add     bufferAddress, #4
-                        rdlong  slowDistance, bufferAddress             
+                        rdlong  slowDistance, bufferAddress ' is this used?            
                         add     bufferAddress, #4
                         rdlong  activeDelayS, bufferAddress 
                         add     bufferAddress, #4
                         rdlong  minDelayCogS, bufferAddress 
                         add     bufferAddress, #4
-                        rdlong  delayChangeCogS, bufferAddress 
+                        rdlong  delayChangeCogS, bufferAddress ' is this accurate enough?
 
                         mov     activeDelay, maxDelayCog
                         wrlong  maxDelayCog, debugMaxDelay
