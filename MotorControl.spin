@@ -19,6 +19,7 @@ minDelay                long 80_000 '80_000
 delayChange             long 800 '8_000
 accelInterval           long 40_000 '' *** This might be a problem.
 accelIntervals          long 0-0
+accelMaxIntervals       long 0-0
 
 'debugAddress            long 0-0
 dirPinX                 long Header#DIR_X_PIN
@@ -45,7 +46,7 @@ PUB Start(address165_) | debugPtr
  
   debugPtr := @debugActiveDelayS
 
-  accelIntervals := ComputeAccelIntervals(maxDelay, minDelay, delayChange)
+  'accelIntervals := ComputeAccelIntervals(maxDelay, minDelay, delayChange, accelInterval)
   
   repeat result from 0 to 40 'Header#MAX_DEBUG_SPI_INDEX
     debugActiveDelayS[result] := debugPtr
@@ -85,14 +86,53 @@ PUB SetMotorParameters(localMax, localMin, localChange, localAccelInterval)
 
   mailbox := @result
   result := @maxDelay
-  accelIntervals := ComputeAccelIntervals(localMax, localMin, localChange)
+  accelMaxIntervals := ComputeMaxAccelIntervals(localMax, localMin, localChange)
+  accelIntervals := ComputeAccelIntervals(localMax, localMin, localChange, localAccelInterval)
   SetCommand(Header#NEW_PARAMETERS_MOTOR)
 
-PRI ComputeAccelIntervals(localMax, localMin, localChange)
+PRI ComputeMaxAccelIntervals(localMax, localMin, localChange)
 
   result := localMax - localMin
   result += localChange - 1     ' make sure divide doesn't truncate value at all
   result /= localChange
+  
+  Pst.Str(string(11, 13, "accelMaxIntervals = "))
+  Pst.Dec(result)
+  
+PRI ComputeAccelIntervals(localMax, localMin, localChange, localAccelInterval) | nextAccel, {
+} nextStep
+
+  Pst.Str(string(11, 13, "ComputeAccelIntervals("))
+  Pst.Dec(localMax)
+  Pst.Str(string(", "))
+  Pst.Dec(localMin)
+  Pst.Str(string(", "))
+  Pst.Dec(localChange)
+  Pst.Str(string(", "))
+  Pst.Dec(localAccelInterval)
+  Pst.Str(string("), accelIntervals = "))
+  Pst.Dec(accelIntervals)
+  
+  longfill(@nextAccel, 0, 2)
+
+  repeat while localMax > localMin
+    nextAccel += localAccelInterval
+    Pst.Str(string(11, 13, "localMax = "))
+    Pst.Dec(localMax)
+    Pst.Str(string(", Min = "))
+    Pst.Dec(localMin)
+    
+    repeat while nextStep < nextAccel
+      result++
+      nextStep += localMax
+      Pst.Str(string(", intervals = "))
+      Pst.Dec(result)
+      Pst.Str(string(", nextStep = "))
+      Pst.Dec(nextStep)
+    localMax -= localChange  
+  
+  Pst.Str(string(11, 13, "accelIntervals = "))
+  Pst.Dec(result)
   
 PUB MoveSingle(localAxis, localDistance) | spinScratch
 
@@ -102,6 +142,8 @@ PUB MoveSingle(localAxis, localDistance) | spinScratch
   Pst.Dec(localDistance)
   Pst.Str(string("), accelIntervals = "))
   Pst.Dec(accelIntervals)
+  
+  longfill(@debugActiveDelayS, 0, 40)
   
   localAxis := stepMaskX[localAxis]
   if localDistance < 0
@@ -183,6 +225,7 @@ PUB MoveLine(longAxis, shortAxis, longDistance, shortDistance) | {
   minDelayS := Cnc.TtaMethod(||longDistance, minDelay, ||shortDistance)
   delayChangeS := Cnc.TtaMethod(||longDistance, delayChange, ||shortDistance)
   longmove(@originalAxes, @longAxis, 2)
+  longfill(@debugActiveDelayS, 0, 40)
   
   Pst.Str(string(11, 13, "MoveLine("))
   Pst.Dec(longAxis)
@@ -194,6 +237,11 @@ PUB MoveLine(longAxis, shortAxis, longDistance, shortDistance) | {
   Pst.Dec(shortDistance)
   Pst.Str(string("), accelIntervals = "))
   Pst.Dec(accelIntervals)
+  Pst.Str(string("), accelMaxIntervals = "))
+  Pst.Dec(accelMaxIntervals)
+
+  
+  
   Pst.Str(string(11, 13, "startDelay (long) = "))
   Pst.Dec(maxDelay)
   Pst.Str(string(", (short) = "))
