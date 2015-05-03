@@ -170,11 +170,11 @@ PUB MainLoop | axisIndex, distance[2]
     distance[0] += 1600
     distance[1] += 900
     Pst.str(string(11, 13, "Driving "))
-    Pst.str(Cnc.FindString(@axesText, 0))
+    Pst.str(Cnc.FindString(Cnc.GetAxisText, 0))
     Pst.str(string(" motor "))
     Pst.Dec(distance[0])
     Pst.str(string(" steps and "))
-    Pst.str(Cnc.FindString(@axesText, 1))
+    Pst.str(Cnc.FindString(Cnc.GetAxisText, 1))
     Pst.str(string(" motor "))
     Pst.Dec(distance[1])
     Pst.str(string(" steps."))
@@ -1662,7 +1662,7 @@ maxDelay                long 10_000 'US_001 * 20_000
                         byte "MANUAL_POTS_MAIN", 0 } 
                           
 DAT
-
+{
 unitsText               byte "steps", 0
                         byte "turns", 0
                         byte "inches", 0
@@ -1676,7 +1676,7 @@ unitsTxt                byte "steps", 0
 axesText                byte "X_AXIS", 0
                         byte "Y_AXIS", 0
                         byte "Z_AXIS", 0
-                        byte "DESIGN_AXIS", 0
+                        byte "DESIGN_AXIS", 0   }
 
 {machineStateTxt         byte "INIT_STATE", 0
                         byte "DESIGN_INPUT_STATE", 0
