@@ -1,0 +1,12 @@
+D08
+D03, Tiny Triangle 2
+D02, 2.00
+D04, 1
+D05, May 3 2015
+D10, Duane Degn
+D11, Propeller Based CNC Controller
+G21
+G01, 1.1, 1.6 
+G01, -2, .5 
+G01, .9, -2.1 
+M02

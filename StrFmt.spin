@@ -192,7 +192,7 @@ pub fdec(ptr, value, len, dp) | p, fnumbuf[4]
     byte[p] := "0"
     p--
   elseif dp < 0
-    repeat -dp
+    repeat ||dp
       byte[p] := "0"
       p--
   else

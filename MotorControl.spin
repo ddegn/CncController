@@ -34,9 +34,9 @@ testBuffer              long 0[TEST_BUFFER_SIZE]
 OBJ
 
   Header : "HeaderCnc"
-  Pst : "Parallax Serial TerminalDat"
-  Format : "StrFmt"
-  Cnc : "CncCommonMethods"
+  'Pst : "Parallax Serial TerminalDat"
+  'Format : "StrFmt"
+  'Cnc : "CncCommonMethods"
    
 PUB Start(address165_) | debugPtr
 
@@ -96,13 +96,13 @@ PRI ComputeMaxAccelIntervals(localMax, localMin, localChange)
   result += localChange - 1     ' make sure divide doesn't truncate value at all
   result /= localChange
   
-  Pst.Str(string(11, 13, "accelMaxIntervals = "))
-  Pst.Dec(result)
+  ''Pst.Str(string(11, 13, "accelMaxIntervals = "))
+  ''Pst.Dec(result)
   
 PRI ComputeAccelIntervals(localMax, localMin, localChange, localAccelInterval) | nextAccel, {
 } nextStep
 
-  Pst.Str(string(11, 13, "ComputeAccelIntervals("))
+  {{Pst.Str(string(11, 13, "ComputeAccelIntervals("))
   Pst.Dec(localMax)
   Pst.Str(string(", "))
   Pst.Dec(localMin)
@@ -111,37 +111,37 @@ PRI ComputeAccelIntervals(localMax, localMin, localChange, localAccelInterval) |
   Pst.Str(string(", "))
   Pst.Dec(localAccelInterval)
   Pst.Str(string("), accelIntervals = "))
-  Pst.Dec(accelIntervals)
+  Pst.Dec(accelIntervals) }}
   
   longfill(@nextAccel, 0, 2)
 
   repeat while localMax > localMin
     nextAccel += localAccelInterval
-    Pst.Str(string(11, 13, "localMax = "))
+    {{Pst.Str(string(11, 13, "localMax = "))
     Pst.Dec(localMax)
     Pst.Str(string(", Min = "))
-    Pst.Dec(localMin)
+    Pst.Dec(localMin)}}
     
     repeat while nextStep < nextAccel
       result++
       nextStep += localMax
-      Pst.Str(string(", intervals = "))
+      {{Pst.Str(string(", intervals = "))
       Pst.Dec(result)
       Pst.Str(string(", nextStep = "))
-      Pst.Dec(nextStep)
+      Pst.Dec(nextStep)}}
     localMax -= localChange  
   
-  Pst.Str(string(11, 13, "accelIntervals = "))
-  Pst.Dec(result)
+  ''Pst.Str(string(11, 13, "accelIntervals = "))
+  ''Pst.Dec(result)
   
 PUB MoveSingle(localAxis, localDistance) | spinScratch
 
-  Pst.Str(string(11, 13, "MoveSingle("))
+  {{Pst.Str(string(11, 13, "MoveSingle("))
   Pst.Dec(localAxis)
   Pst.Str(string(", "))
   Pst.Dec(localDistance)
   Pst.Str(string("), accelIntervals = "))
-  Pst.Dec(accelIntervals)
+  Pst.Dec(accelIntervals)  }}
   
   longfill(@debugActiveDelayS, 0, 40)
   
@@ -153,15 +153,15 @@ PUB MoveSingle(localAxis, localDistance) | spinScratch
     dira[dirPinX[localAxis]] := 1
       
   mailbox := @result
-  Pst.Str(string(11, 13, "localAxis (mask) "))
-  Cnc.ReadableBin(localAxis, 32)
+  ''Pst.Str(string(11, 13, "localAxis (mask) "))
+  'Cnc.ReadableBin(localAxis, 32)
   
-  Cnc.PressToContinue
+  'Cnc.PressToContinue
    
   'SetCommand(Header#SINGLE_MOTOR)
   command := Header#SINGLE_MOTOR
   repeat 'while command          '' Wait for command to be cleared, signifying receipt
-    Pst.Str(string(11, 13, "location = ")) ' watch progress
+    {{Pst.Str(string(11, 13, "location = ")) ' watch progress
     Pst.Dec(debugLocationClueF)
     Pst.Str(string(", ")) 
     Pst.Dec(debugLocationClue)
@@ -210,24 +210,24 @@ PUB MoveSingle(localAxis, localDistance) | spinScratch
     Pst.Dec(debugNextStepTime)   
     Pst.Str(string(", next - half = ")) 
     Pst.Dec(debugNextStepTime - debugNextHalfTime)   
-    
+    }}
     
                         
   while command and debugLocationClue <> 999        
-  Pst.Str(string(11, 13, "full speed steps = "))
-  Pst.Dec(result)
+  ''Pst.Str(string(11, 13, "full speed steps = "))
+ '' Pst.Dec(result)
   
    
 PUB MoveLine(longAxis, shortAxis, longDistance, shortDistance) | {
 } maxDelayS, minDelayS, delayChangeS, spinScratch, originalAxes[2]
 
-  maxDelayS := Cnc.TtaMethod(||longDistance, maxDelay, ||shortDistance)
-  minDelayS := Cnc.TtaMethod(||longDistance, minDelay, ||shortDistance)
-  delayChangeS := Cnc.TtaMethod(||longDistance, delayChange, ||shortDistance)
+  maxDelayS := Header.TtaMethod(||longDistance, maxDelay, ||shortDistance)
+  minDelayS := Header.TtaMethod(||longDistance, minDelay, ||shortDistance)
+  delayChangeS := Header.TtaMethod(||longDistance, delayChange, ||shortDistance)
   longmove(@originalAxes, @longAxis, 2)
   longfill(@debugActiveDelayS, 0, 40)
   
-  Pst.Str(string(11, 13, "MoveLine("))
+  {{Pst.Str(string(11, 13, "MoveLine("))
   Pst.Dec(longAxis)
   Pst.Str(string(", "))
   Pst.Dec(shortAxis)
@@ -238,7 +238,7 @@ PUB MoveLine(longAxis, shortAxis, longDistance, shortDistance) | {
   Pst.Str(string("), accelIntervals = "))
   Pst.Dec(accelIntervals)
   Pst.Str(string("), accelMaxIntervals = "))
-  Pst.Dec(accelMaxIntervals)
+  Pst.Dec(accelMaxIntervals) 
 
   
   
@@ -253,7 +253,7 @@ PUB MoveLine(longAxis, shortAxis, longDistance, shortDistance) | {
   Pst.Str(string(11, 13, "delayChange (long) = "))
   Pst.Dec(delayChange)
   Pst.Str(string(", (short) = "))
-  Pst.Dec(delayChangeS)
+  Pst.Dec(delayChangeS)  }}
 
   repeat result from 0 to 1
     longAxis[result] := stepMaskX[originalAxes[result]]
@@ -262,21 +262,21 @@ PUB MoveLine(longAxis, shortAxis, longDistance, shortDistance) | {
       ||longDistance[result]
     else
       dira[dirPinX[originalAxes[result]]] := 1
-    Pst.Str(string(11, 13))
-    Pst.Str(Cnc.FindString(Cnc.GetAxisText, originalAxes[result]))
+   {{ Pst.Str(string(11, 13))
+    {Pst.Str(Header.FindString(Cnc.GetAxisText, originalAxes[result]))} 
     Pst.Str(string(" (mask)["))
     Pst.Dec(originalAxes[result])
-    Pst.Str(string("] = "))
-    Cnc.ReadableBin(longAxis[result], 32)  
+    Pst.Str(string("] = "))  }}
+    'Cnc.ReadableBin(longAxis[result], 32)  
 
-  Cnc.PressToContinue
+  'Cnc.PressToContinue
   
   mailbox := @result
 
   'SetCommand(Header#DUAL_MOTOR)
   command := Header#DUAL_MOTOR
   repeat 'while command          '' Wait for command to be cleared, signifying receipt
-    Pst.Str(string(11, 13, "location = ")) ' watch progress
+    {{Pst.Str(string(11, 13, "location = ")) ' watch progress
     Pst.Dec(debugLocationClueF)
     Pst.Str(string(", ")) 
     Pst.Dec(debugLocationClue)
@@ -386,7 +386,7 @@ PUB MoveLine(longAxis, shortAxis, longDistance, shortDistance) | {
     Pst.Str(string(", nextStepTime = ")) 
     Pst.Dec(debugNextStepTime)   
     Pst.Str(string(", next - half = ")) 
-    Pst.Dec(debugNextStepTime - debugNextHalfTime)
+    Pst.Dec(debugNextStepTime - debugNextHalfTime)}}
                         
   while command and debugLocationClue <> 999
     

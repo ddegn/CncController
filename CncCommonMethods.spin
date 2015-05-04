@@ -326,7 +326,7 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
       
       if WatchForChange(@oledState, frozenState, 2)
         return
-
+             
     
     ''******************************************************
     ''Display the contents of memory. Display the address as
@@ -358,7 +358,7 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
       
       if WatchForChange(@oledState, frozenState, 100)
         return
-    
+               
     ''****************************************************
     ''Scrolling Parallax - 16x32 Font, 1 line 8 characters
     ''****************************************************
@@ -539,7 +539,7 @@ PRI ReadoutOled(frozenState) | localIndex
     ReadoutOled8(frozenState)
   else
     repeat while localIndex < oledDataQuantity
-      result := strsize(FindString(oledLabelPtr, localIndex))
+      result := strsize(Header.FindString(oledLabelPtr, localIndex))
       if oledDataQuantity[localIndex] '<> $80_00_00_00
         result += maxDigits
       if result > 8
@@ -1611,7 +1611,7 @@ PUB DivideWithRound(numerator, denominator)
     
   result := numerator / denominator
 
-PUB TtaMethodSigned(N, X, localD)   ' return X*N/D where all numbers and result are positive =<2^31
+{PUB TtaMethodSigned(N, X, localD)   ' return X*N/D where all numbers and result are positive =<2^31
 
   result := 1
   if N < 0
@@ -1646,7 +1646,7 @@ PUB BinNormal (y, x, b) : f                  ' calculate f = y/x * 2^b
 PUB FindString(firstStr, stringIndex)      
 
   result := Header.FindString(firstStr, stringIndex)
-    
+ }   
 PUB PauseForInput
 
   Pst.Str(string(11, 13, "Press any key to continue."))
@@ -1745,15 +1745,15 @@ PUB PressToContinueOrClose(closeCharacter)
 
 PUB GetUnitsName(unitIndex)
 
-  result := FindString(@unitsText, unitIndex)
+  result := Header.FindString(@unitsText, unitIndex)
                         
 PUB GetAxisName(axisIndex)
 
-  result := FindString(@axesText, axisIndex)
+  result := Header.FindString(@axesText, axisIndex)
                         
 PUB GetMachineStateName(machineStateIndex)
 
-  result := FindString(@machineStateTxt, machineStateIndex)
+  result := Header.FindString(@machineStateTxt, machineStateIndex)
                         
 PUB SetAdcChannels(firstChan, numberOfChans)
 
