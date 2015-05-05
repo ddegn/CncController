@@ -250,11 +250,11 @@ PUB Adc3PotsLoop | localIndex, row, pointer
   
 PUB AdcJoystickLoop | localIndex, buttonValue, previousButton, {
 } invertPos[2], invertSize, center[3], deadBand, posSlope[2], sizeSlope, previousJoy[3], {
-} temp, maxPos[2]
+} temp, maxPos[2], zero
   L
   Pst.Str(string(11, 13, "AdcJoystickLoop Method"))
   C
- 
+  zero := 0
   previousButton := -1
 
   oledPtr[3] := 0 '$80_00_00_00
@@ -262,7 +262,7 @@ PUB AdcJoystickLoop | localIndex, buttonValue, previousButton, {
 
   oledPtr[5] := oledPtr[4] + 4
   oledPtr[6] := oledPtr[4] + 8
-  oledPtr[0] := oledPtr[4] + 12
+  oledPtr[0] := @zero 'oledPtr[4] + 12
   oledPtr[1] := oledPtr[4] + 16
   oledPtr[2] := oledPtr[4] + 20
   oledPtr[7] := @timer
@@ -380,6 +380,7 @@ PUB AdcJoystickLoop | localIndex, buttonValue, previousButton, {
     Pst.Char(13)
     'C
     timer--
+    zero += 1111
     'DHome
     'Pst.Home
     repeat localIndex from 0 to 7

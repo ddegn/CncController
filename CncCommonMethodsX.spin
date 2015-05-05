@@ -244,15 +244,18 @@ PUB ScrollString(localStr, pstFlag)
   UpdateDisplay
 
   if pstFlag
+    L
     Pst.ClearEnd
     Pst.Newline
     Pst.Str(localStr)
+    C
     
 PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, bufferAddress, {
 } eightByteBuffer[2]
 
 
- { Pst.str(string(11, 13, "WriteOledString(", 34))
+  L
+  Pst.str(string(11, 13, "WriteOledString(", 34))
   Pst.Str(str)
   Pst.str(string(34, ", "))
   Pst.Dec(len)
@@ -262,8 +265,8 @@ PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, buffer
   Pst.Dec(col)
   Pst.str(string(", "))
   Pst.Dec(transparentFlag)
-  Pst.str(string(")"))   }
-
+  Pst.str(string(")"))   
+  C
   characterSize := ((fontWidth + 7) / 8) * fontHeight ' *** think about this, which direction is up?
 
   'Pst.str(string(11, 13, "characterSize = "))
@@ -293,6 +296,28 @@ PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, buffer
     Sd[Header#OLED_DATA_SD].FileSeek(((fontFirstChar #> byte[str++] <# fontLastChar) - {
     } fontFirstChar) * characterSize)
     Sd[Header#OLED_DATA_SD].ReadData(bufferAddress, characterSize)
+    if row == 0 and byte[str - 1] => "0" and byte[str - 1] =< "9"
+      L
+      Pst.str(string(11, 13, "Call FitBitmap("))
+      Pst.Dec(Spi.GetBuffer)
+      Pst.str(string(", "))
+      Pst.Dec(Header#OLED_WIDTH)
+      Pst.str(string(", "))
+      Pst.Dec(Header#OLED_HEIGHT)
+      Pst.str(string(", "))
+      Pst.Dec(bufferAddress)
+      Pst.str(string(", "))
+      Pst.Dec(fontWidth)
+      Pst.str(string(", "))
+      Pst.Dec(fontHeight)
+      Pst.str(string(", "))
+      Pst.Dec(col)
+      Pst.str(string(", "))
+      Pst.Dec(row)
+      Pst.str(string(", "))
+      Pst.Dec(transparentFlag)
+      Pst.str(string(")"))
+      PressToContinueC
     FitBitmap(Spi.GetBuffer, Header#OLED_WIDTH, Header#OLED_HEIGHT, bufferAddress, {
     } fontWidth, fontHeight, col, row, transparentFlag)
     col += fontWidth
@@ -322,10 +347,11 @@ PUB ScrollBuffer(lines)
       } Header#OLED_WIDTH * (Header#OLED_LINES - lines))
       bytefill(Spi.GetBuffer, 0, lines * Header#OLED_WIDTH)
     else
+      L
       Pst.str(string(7, 11, 13, 7, "Error! fontHeight = "))
       Pst.Dec(fontHeight)   
       Pst.Char(7)
-      PressToContinue
+      PressToContinueC
       ' There are presently only 8 pixel fonts.
       ' If some other pixel height is used, the "FitBitmap" method will need to be
       ' used to place the font.
@@ -1826,13 +1852,14 @@ PUB PressToPause
     PressToContinue
     
 PUB PressToContinue
-  
-  Pst.str(string(11, 13, "Press to continue."))
-  repeat
-    result := Pst.RxCount
-  until result
-  Pst.RxFlush
 
+
+  Pst.str(string(11, 13, "Press to continue."))  
+  repeat 
+    result := Pst.RxCount  
+  until result 
+  Pst.RxFlush
+  
 PUB PressToContinueC
   
   Pst.str(string(11, 13, "Press to continue."))
