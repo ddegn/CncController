@@ -240,6 +240,9 @@ PUB ScrollString(localStr, pstFlag)
     
   'Write4x16String(localStr, strsize(localStr) <# 16, activeScrollRow, 0)
   WriteOledString(localStr, strsize(localStr) <# Header#OLED_WIDTH / fontWidth, activeScrollRow, 0, 0)
+
+  UpdateDisplay
+
   if pstFlag
     Pst.ClearEnd
     Pst.Newline
@@ -249,7 +252,7 @@ PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, buffer
 } eightByteBuffer[2]
 
 
-  Pst.str(string(11, 13, "WriteOledString(", 34))
+ { Pst.str(string(11, 13, "WriteOledString(", 34))
   Pst.Str(str)
   Pst.str(string(34, ", "))
   Pst.Dec(len)
@@ -259,12 +262,12 @@ PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, buffer
   Pst.Dec(col)
   Pst.str(string(", "))
   Pst.Dec(transparentFlag)
-  Pst.str(string(")"))
+  Pst.str(string(")"))   }
 
   characterSize := ((fontWidth + 7) / 8) * fontHeight ' *** think about this, which direction is up?
 
-  Pst.str(string(11, 13, "characterSize = "))
-  Pst.Dec(characterSize)
+  'Pst.str(string(11, 13, "characterSize = "))
+  'Pst.Dec(characterSize)
     
   row *= fontHeight
   row <#= Header#OLED_HEIGHT - fontHeight
@@ -272,12 +275,19 @@ PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, buffer
   col <#= Header#OLED_WIDTH - fontWidth 
   bufferAddress := @eightByteBuffer 'Spi.GetPasmArea '* possible conflict with inverted buffer
   
-  'if oledFileType <> Header#FONT_OLED_TYPE ' ** is this needed?
-  'oledFileType := Header#FONT_OLED_TYPE
+  
+  
+  if oledFileType <> Header#FONT_OLED_TYPE ' ** is this needed?
+    if oledFileType == Header#GRAPHICS_OLED_TYPE
+      LSd
+      Sd[Header#OLED_DATA_SD].CloseFile
+      CSd
+    OpenFileToRead(Header#OLED_DATA_SD, fontFileName, -1)
+    oledFileType := Header#FONT_OLED_TYPE
   'if activeFont <> Header#_5_x_7_FONT
     'SetFont(Header#_5_x_7_FONT)
     
-  OpenFileToRead(Header#OLED_DATA_SD, fontFileName, -1)
+  
   
   repeat len
     Sd[Header#OLED_DATA_SD].FileSeek(((fontFirstChar #> byte[str++] <# fontLastChar) - {
@@ -286,10 +296,10 @@ PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, buffer
     FitBitmap(Spi.GetBuffer, Header#OLED_WIDTH, Header#OLED_HEIGHT, bufferAddress, {
     } fontWidth, fontHeight, col, row, transparentFlag)
     col += fontWidth
-    Pst.str(string(11, 13, "col = "))
-    Pst.Dec(col)
-  UpdateDisplay
-  Sd[Header#OLED_DATA_SD].CloseFile
+    'Pst.str(string(11, 13, "col = "))
+    'Pst.Dec(col)
+  'UpdateDisplay
+  'Sd[Header#OLED_DATA_SD].CloseFile
   
 'if fontHeight == 8
  '   Write4x16String(str, len, row, col)
@@ -351,6 +361,9 @@ PRI OledMonitor : frozenState
         \PropLogoLoop(frozenState)
       Header#AXES_READOUT_OLED:
         \ReadoutOled(frozenState)
+        LSd
+        Sd[Header#OLED_DATA_SD].CloseFile
+        CSd
       Header#BITMAP_OLED:
       Header#GRAPH_OLED:
       Header#PAUSE_MONITOR_OLED:

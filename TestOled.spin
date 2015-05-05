@@ -169,6 +169,7 @@ PUB MainLoop | localIndex, localBuffer[5]
       result := Format.Dec(result, localIndex)
       byte[result] := 0
       Cnc.ScrollString(@localBuffer, 1)
+      'Cnc.UpdateDisplay
       Cnc.PressToContinue
     
     AdcJoystickLoop
