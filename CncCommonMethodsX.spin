@@ -1,4 +1,4 @@
-DAT programName         byte "CncCommonMethods", 0
+DAT programName         byte "CncCommonMethodsX", 0
 CON
 {{      
 
@@ -97,6 +97,7 @@ targetInvert            long 0[4]
 invertFlag              long 0
 invertPoints            long 0[4]
 configNamePtr           long 0
+fontFileName            long 0-0
 
 machineState            byte Header#INIT_STATE
 units                   byte Header#MILLIMETER_UNIT 
@@ -106,6 +107,14 @@ previousLedState        byte 255
 maxDigits               byte Header#DEFAULT_MAX_DIGITS
 debugLock               byte 255
 sdLock                  byte 255
+oledFileType            byte Header#NO_ACTIVE_OLED_TYPE
+activeFont              byte Header#_5_x_7_FONT
+fontWidth               byte 0-0
+fontHeight              byte 0-0
+fontFirstChar           byte 0-0
+fontLastChar            byte 0-0
+lineLimit               byte 0-0
+columnLimit             byte 0-0
 {configData              byte 0[Header#CONFIG_SIZE] Header#DEFAULT_MACHINE_STATE, HOMED_OFFSET, NUNCHUCK_MODE_OFFSET
   VERSION_OFFSET_0, VERSION_OFFSET_1, VERSION_OFFSET_2, VERSION_OFFSET_3
   VERSION_OFFSET_4, VERSION_OFFSET_5, VERSION_OFFSET_6
@@ -137,9 +146,13 @@ PUB Start
   } Header#RTC_PIN_3)
   
   SetLocks
+  SetFont(activeFont)
   
   Pst.str(string(11, 13, "SD Card Driver Started"))
 
+  
+  MountSd(Header#OLED_DATA_SD)
+  
   result := cognew(OledMonitor, @oledStack)
   Pst.str(string(11, 13, "OledMonitor started on cog # "))
   Pst.Dec(result)   
@@ -207,6 +220,17 @@ PUB ResetVerticalScroll
 
   activeScrollRow := 0
   
+PUB SetFont(fontIndex)
+
+  activeFont := fontIndex
+  fontWidth := Header.GetFontWidth(fontIndex)
+  fontHeight := Header.GetFontHeight(fontIndex)
+  fontFirstChar := Header.GetFontFirst(fontIndex)
+  fontLastChar := Header.GetFontLast(fontIndex)
+  lineLimit := (Header#OLED_WIDTH / fontHeight) - 1      
+  columnLimit := (Header#OLED_WIDTH / fontWidth) - 1
+  fontFileName := Header.GetFontName(fontIndex)
+  
 PUB ScrollString(localStr, pstFlag)
 
   if activeScrollRow < Header#OLED_LINES - 1
@@ -214,31 +238,77 @@ PUB ScrollString(localStr, pstFlag)
   else
     ScrollBuffer(1)
     
-  Write4x16String(localStr, strsize(localStr) <# 16, activeScrollRow, 0)
+  'Write4x16String(localStr, strsize(localStr) <# 16, activeScrollRow, 0)
+  WriteOledString(localStr, strsize(localStr) <# Header#OLED_WIDTH / fontWidth, activeScrollRow, 0, 0)
   if pstFlag
     Pst.ClearEnd
     Pst.Newline
     Pst.Str(localStr)
     
+PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, bufferAddress
+
+  characterSize := ((fontWidth + 7) / 8) * fontHeight
+
+  row *= fontHeight
+  row <#= Header#OLED_HEIGHT - fontHeight
+  col *= fontWidth
+  col <#= Header#OLED_WIDTH - fontWidth 
+  bufferAddress := Spi.GetPasmArea '* possible conflict with inverted buffer
+
+  'if oledFileType <> Header#FONT_OLED_TYPE ' ** is this needed?
+  'oledFileType := Header#FONT_OLED_TYPE
+  'if activeFont <> Header#_5_x_7_FONT
+    'SetFont(Header#_5_x_7_FONT)
+    
+  OpenFileToRead(Header#OLED_DATA_SD, fontFileName, -1)
+  
+  repeat len
+    Sd[Header#OLED_DATA_SD].FileSeek(((fontFirstChar #> byte[str] <# fontLastChar) - {
+    } fontFirstChar) * characterSize)
+    Sd[Header#OLED_DATA_SD].ReadData(bufferAddress, characterSize)
+    FitBitmap(Spi.GetBuffer, Header#OLED_WIDTH, Header#OLED_HEIGHT, bufferAddress, {
+    } fontWidth, fontHeight, col, row, transparentFlag)
+
+  Sd[Header#OLED_DATA_SD].CloseFile
+  
+'if fontHeight == 8
+ '   Write4x16String(str, len, row, col)
+  
 PUB Write4x16String(str, len, row, col)
 
-  Spi.Write4x16String(str, len, row, col)
+  'Spi.Write4x16String(str, len, row, col)
+  if activeFont <> Header#_5_x_7_FONT
+    SetFont(Header#_5_x_7_FONT)
+  WriteOledString(str, len, row, col, 0)
   
 PUB ScrollBuffer(lines)
 '' Positive values of "lines" will cause the buffer to scroll up, leaving room at the
 '' bottom.
 
-  lines := -7 #> lines <# 7
+  lines := -lineLimit #> lines <# lineLimit
   if lines < 0
-    bytemove(Spi.GetBuffer + (lines * Header#OLED_WIDTH), Spi.GetBuffer, {
-    } Header#OLED_WIDTH * (Header#OLED_LINES - lines))
-    bytefill(Spi.GetBuffer, 0, lines * Header#OLED_WIDTH)
+    if fontHeight == 8
+      bytemove(Spi.GetBuffer + (lines * Header#OLED_WIDTH), Spi.GetBuffer, {
+      } Header#OLED_WIDTH * (Header#OLED_LINES - lines))
+      bytefill(Spi.GetBuffer, 0, lines * Header#OLED_WIDTH)
+    else
+      Pst.str(string(7, 11, 13, 7, "Error! fontHeight = "))
+      Pst.Dec(fontHeight)   
+      Pst.Char(7)
+      PressToContinue
+      ' There are presently only 8 pixel fonts.
+      ' If some other pixel height is used, the "FitBitmap" method will need to be
+      ' used to place the font.
+      {FitBitmap(destPtr, destWidth, destHeight, sourcePtr, sourceWidth, sourceHeight, {
+      } offsetX, offsetY, transparentFlag) } 
+
   elseif lines > 0
     bytemove(Spi.GetBuffer, Spi.GetBuffer + (lines * Header#OLED_WIDTH), {
     } Header#OLED_WIDTH * (Header#OLED_LINES - lines))
     bytefill(Spi.GetBuffer + ((Header#OLED_LINES - lines) * Header#OLED_WIDTH), {
     } 0, lines * Header#OLED_WIDTH)
-    
+    ' ** Add FitBitmap option
+        
 PUB SetOled(state, labelPtr, dataPtrPtr, dataQuantity)
 
   oledState := state
@@ -487,8 +557,8 @@ PRI BounceBitmap(frozenState, foreground, foregroundWidth, foregroundHeight, {
     
   repeat
   
-    FitBitmap(Spi.GetBuffer, 128, 64, foreground, foregroundWidth, foregroundHeight, {
-    } position[0], position[1], transparentFlag)
+    FitBitmap(Spi.GetBuffer, Header#OLED_WIDTH, Header#OLED_HEIGHT, foreground, {
+    } foregroundWidth, foregroundHeight, position[0], position[1], transparentFlag)
     UpdateDisplay
     RestoreBackground
     if position[0] == startX
@@ -1532,6 +1602,8 @@ PUB WriteData(instance, pointer, size)
 
 PUB BootPartition(instance, pointer)
 
+  if instance <> Header#OLED_DATA_SD
+    UnmountSd(Header#OLED_DATA_SD)
   result := Sd[instance].BootPartition(pointer)
 
 PUB ListEntries(instance, mode)
