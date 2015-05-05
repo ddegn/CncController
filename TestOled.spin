@@ -157,12 +157,20 @@ PUB Setup(parameter0, parameter1) | cncCog
   MainLoop
 
 
-PUB MainLoop | axisIndex, distance[2]
+PUB MainLoop | localIndex, localBuffer[5]
 
-  axisIndex := 0
-  longfill(@distance, 0, 2)
+  'axisIndex := 0
+  'longfill(@distance, 0, 2)
   
   repeat
+    Cnc.SetOled(Header#PAUSE_MONITOR_OLED, 0, 0, 0)
+    repeat localIndex from 0 to 16
+      result := Format.Str(@localBuffer, string("line # "))
+      result := Format.Dec(result, localIndex)
+      byte[result] := 0
+      Cnc.ScrollString(@localBuffer, 1)
+      Cnc.PressToContinue
+    
     AdcJoystickLoop
       
 PUB Adc3PotsLoop | localIndex, row, pointer

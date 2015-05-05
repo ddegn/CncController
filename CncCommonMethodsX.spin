@@ -245,16 +245,33 @@ PUB ScrollString(localStr, pstFlag)
     Pst.Newline
     Pst.Str(localStr)
     
-PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, bufferAddress
+PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, bufferAddress, {
+} eightByteBuffer[2]
 
-  characterSize := ((fontWidth + 7) / 8) * fontHeight
 
+  Pst.str(string(11, 13, "WriteOledString(", 34))
+  Pst.Str(str)
+  Pst.str(string(34, ", "))
+  Pst.Dec(len)
+  Pst.str(string(", "))
+  Pst.Dec(row)
+  Pst.str(string(", "))
+  Pst.Dec(col)
+  Pst.str(string(", "))
+  Pst.Dec(transparentFlag)
+  Pst.str(string(")"))
+
+  characterSize := ((fontWidth + 7) / 8) * fontHeight ' *** think about this, which direction is up?
+
+  Pst.str(string(11, 13, "characterSize = "))
+  Pst.Dec(characterSize)
+    
   row *= fontHeight
   row <#= Header#OLED_HEIGHT - fontHeight
   col *= fontWidth
   col <#= Header#OLED_WIDTH - fontWidth 
-  bufferAddress := Spi.GetPasmArea '* possible conflict with inverted buffer
-
+  bufferAddress := @eightByteBuffer 'Spi.GetPasmArea '* possible conflict with inverted buffer
+  
   'if oledFileType <> Header#FONT_OLED_TYPE ' ** is this needed?
   'oledFileType := Header#FONT_OLED_TYPE
   'if activeFont <> Header#_5_x_7_FONT
@@ -263,12 +280,15 @@ PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, buffer
   OpenFileToRead(Header#OLED_DATA_SD, fontFileName, -1)
   
   repeat len
-    Sd[Header#OLED_DATA_SD].FileSeek(((fontFirstChar #> byte[str] <# fontLastChar) - {
+    Sd[Header#OLED_DATA_SD].FileSeek(((fontFirstChar #> byte[str++] <# fontLastChar) - {
     } fontFirstChar) * characterSize)
     Sd[Header#OLED_DATA_SD].ReadData(bufferAddress, characterSize)
     FitBitmap(Spi.GetBuffer, Header#OLED_WIDTH, Header#OLED_HEIGHT, bufferAddress, {
     } fontWidth, fontHeight, col, row, transparentFlag)
-
+    col += fontWidth
+    Pst.str(string(11, 13, "col = "))
+    Pst.Dec(col)
+  UpdateDisplay
   Sd[Header#OLED_DATA_SD].CloseFile
   
 'if fontHeight == 8
@@ -276,7 +296,7 @@ PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, buffer
   
 PUB Write4x16String(str, len, row, col)
 
-  'Spi.Write4x16String(str, len, row, col)
+  'Write4x16String(str, len, row, col)
   if activeFont <> Header#_5_x_7_FONT
     SetFont(Header#_5_x_7_FONT)
   WriteOledString(str, len, row, col, 0)
@@ -333,6 +353,12 @@ PRI OledMonitor : frozenState
         \ReadoutOled(frozenState)
       Header#BITMAP_OLED:
       Header#GRAPH_OLED:
+      Header#PAUSE_MONITOR_OLED:
+        ' do nothing
+      Header#CLEAR_OLED:
+        if previousLedState <> Header#CLEAR_OLED
+          Spi.clearDisplay
+        
     'Spi.clearDisplay
     previousLedState := frozenState
       
@@ -360,8 +386,8 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
     {
     Spi.clearDisplay
                                '0123456789012345
-    Spi.write4x16String(String("Based on code"), strsize(String("Based on code")), 2, 0)
-    Spi.write4x16String(String("from . . ."), strsize(String("from . . .")), 4, 2)
+    Write4x16String(String("Based on code"), strsize(String("Based on code")), 2, 0)
+    Write4x16String(String("from . . ."), strsize(String("from . . .")), 4, 2)
     UpdateDisplay
     
     if WatchForChange(@oledState, frozenState, 2_000)
@@ -416,22 +442,22 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
     Spi.clearDisplay
     repeat q from 0 to 512 step 16
       bytemove(@tstr, Num.ToStr(||word[q + 2], Num#BIN17), 20)
-      Spi.write4x16String(@tstr[1], 16, 0, 0)
+      Write4x16String(@tstr[1], 16, 0, 0)
       bytemove(@tstr, Num.ToStr(||word[q + 0], Num#BIN17), 20)
-      Spi.write4x16String(@tstr[1], 16, 1, 0)
+      Write4x16String(@tstr[1], 16, 1, 0)
       bytemove(@tstr, Num.ToStr(||word[q + 6], Num#BIN17), 20)
-      Spi.write4x16String(@tstr[1], 16, 2, 0)
+      Write4x16String(@tstr[1], 16, 2, 0)
       bytemove(@tstr, Num.ToStr(||word[q + 4], Num#BIN17), 20)
-      Spi.write4x16String(@tstr[1], 16, 3, 0)
+      Write4x16String(@tstr[1], 16, 3, 0)
       if Spi.GetDisplayType == Spi#TYPE_128X64
         bytemove(@tstr, Num.ToStr(||word[q + 10], Num#BIN17), 20)
-        Spi.write4x16String(@tstr[1], 16, 4, 0)
+        Write4x16String(@tstr[1], 16, 4, 0)
         bytemove(@tstr, Num.ToStr(||word[q + 8], Num#BIN17), 20)
-        Spi.write4x16String(@tstr[1], 16, 5, 0)
+        Write4x16String(@tstr[1], 16, 5, 0)
         bytemove(@tstr, Num.ToStr(||word[q + 14], Num#BIN17), 20)
-        Spi.write4x16String(@tstr[1], 16, 6, 0)
+        Write4x16String(@tstr[1], 16, 6, 0)
         bytemove(@tstr, Num.ToStr(||word[q + 12], Num#BIN17), 20)
-        Spi.write4x16String(@tstr[1], 16, 7, 0)
+        Write4x16String(@tstr[1], 16, 7, 0)
 
       UpdateDisplay
       
@@ -687,7 +713,7 @@ PRI ReadoutOled8(frozenState) | labelPtr, dataPtrPtr, dataQuantity, len, row, bu
         elseif remainingSpace > 0
           Format.Chstr(result, " ", remainingSpace)
     
-        Spi.Write4x16String(@localBuffer, 16, row, 0)
+        Write4x16String(@localBuffer, 16, row, 0)
         
       labelPtr += strsize(labelPtr) ' skip to next label
       labelPtr++ ' skip terminating zero
