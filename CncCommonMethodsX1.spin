@@ -71,7 +71,7 @@ VAR
 
 
   'long lastRefreshTime, refreshInterval
-  long oledStack[200]
+  long oledStack[175]
   long sdErrorNumber, sdErrorString, sdTryCount
   long filePosition[Header#NUMBER_OF_AXES]
   long globalMultiplier, globalDecPoints
@@ -116,6 +116,7 @@ fontFirstChar           byte 0-0
 fontLastChar            byte 0-0
 lineLimit               byte 0-0
 columnLimit             byte 0-0
+rowOfBytes              byte 0[128]
 {configData              byte 0[Header#CONFIG_SIZE] Header#DEFAULT_MACHINE_STATE, HOMED_OFFSET, NUNCHUCK_MODE_OFFSET
   VERSION_OFFSET_0, VERSION_OFFSET_1, VERSION_OFFSET_2, VERSION_OFFSET_3
   VERSION_OFFSET_4, VERSION_OFFSET_5, VERSION_OFFSET_6
@@ -983,7 +984,7 @@ PUB FitBitmapId(bitmapIndex, offsetX, offsetY, transparentFlag)
 
 PUB FitBitmap(destPtr, destWidth, destHeight, sourcePtr, sourceWidth, sourceHeight, {
 } offsetX, offsetY, transparentFlag, fromSdFlag) | activeSourcePtr, activeDestPtr, arrayRowOffsetY, {
-} byteOffset, {destRows,} sourceRows, outOfBounds[4], bitAdjust
+} byteOffset, {destRows,} sourceRows, outOfBounds[4], bitAdjust, tempSourcePtr
 '' Vertical bytes
 '' destWidth, destHeight, sourceWidth and sourceHeight in pixels
 '' If reading bitmap from SD card, "sourcePtr" should contain the name of the file
@@ -1056,7 +1057,16 @@ PUB FitBitmap(destPtr, destWidth, destHeight, sourcePtr, sourceWidth, sourceHeig
     'elseif activeDestPtr < outOfBounds[0]
       'next
 
-    
+    if fromSdFlag
+      {Sd[Header#OLED_DATA_SD].FileSeek(activeSourcePtr)
+      Pst.str(string(11, 13, "FileSeek("))
+      Pst.Dec(activeSourcePtr)
+      Pst.Char(")")   }
+       
+      Sd[Header#OLED_DATA_SD].ReadData(@rowOfBytes, sourceWidth)
+      tempSourcePtr := @rowOfBytes
+    else
+      tempSourcePtr := activeSourcePtr 
     
     if byteOffset 'true '
       if activeDestPtr < outOfBounds[0]
@@ -1067,13 +1077,9 @@ PUB FitBitmap(destPtr, destWidth, destHeight, sourcePtr, sourceWidth, sourceHeig
         outOfBounds[3] := outOfBounds[1]
       else
         outOfBounds[3] := activeDestPtr + destWidth
-      if fromSdFlag
-        Sd[Header#OLED_DATA_SD].FileSeek(activeSourcePtr)
-        Pst.str(string(11, 13, "FileSeek("))
-        Pst.Dec(activeSourcePtr)
-        Pst.Char(")")   
-      MoveTopBits(activeDestPtr, destWidth, activeSourcePtr, sourceWidth, byteOffset, {
-      } outOfBounds[2], outOfBounds[3], transparentFlag, fromSdFlag)
+       
+      MoveTopBits(activeDestPtr, destWidth, tempSourcePtr, sourceWidth, byteOffset, {
+      } outOfBounds[2], outOfBounds[3], transparentFlag, 0)
       'UpdateDisplay
       'PressToContinue
 
@@ -1085,27 +1091,21 @@ PUB FitBitmap(destPtr, destWidth, destHeight, sourcePtr, sourceWidth, sourceHeig
         outOfBounds[3] := outOfBounds[1]
       else
         outOfBounds[3] := activeDestPtr + (2 * destWidth)
-
-      if fromSdFlag
-        Sd[Header#OLED_DATA_SD].FileSeek(activeSourcePtr)
-        Pst.str(string(11, 13, "FileSeek("))
-        Pst.Dec(activeSourcePtr)
-        Pst.Char(")")
           
-      MoveBottomBits(activeDestPtr + destWidth, destWidth, activeSourcePtr, sourceWidth, byteOffset, {
-      } outOfBounds[2], outOfBounds[3], transparentFlag, fromSdFlag)
+      MoveBottomBits(activeDestPtr + destWidth, destWidth, tempSourcePtr, sourceWidth, byteOffset, {
+      } outOfBounds[2], outOfBounds[3], transparentFlag, 0)
       'UpdateDisplay
       'PressToContinue
       
     else
       if activeDestPtr => outOfBounds[0] and activeDestPtr + sourceWidth < outOfBounds[1] ' full line in bounds
-        MoveOrOrBytes(activeDestPtr, activeSourcePtr, sourceWidth, transparentFlag, fromSdFlag)
+        MoveOrOrBytes(activeDestPtr, tempSourcePtr, sourceWidth, transparentFlag, 0)
       elseif activeDestPtr < outOfBounds[0] and activeDestPtr + sourceWidth => outOfBounds[0] ' end of line in bounds
         result := outOfBounds[0] - activeDestPtr ' how far out of bounds
-        MoveOrOrBytes(outOfBounds[0], activeSourcePtr + result, sourceWidth - result, transparentFlag, fromSdFlag)
+        MoveOrOrBytes(outOfBounds[0], tempSourcePtr + result, sourceWidth - result, transparentFlag, fromSdFlag)
       elseif activeDestPtr < outOfBounds[1] ' beginning of line in bounds
         result := outOfBounds[1] - activeDestPtr
-        MoveOrOrBytes(activeDestPtr, activeSourcePtr, result, transparentFlag, fromSdFlag)
+        MoveOrOrBytes(activeDestPtr, tempSourcePtr, result, transparentFlag, fromSdFlag)
         
         'Pst.str(string(11, 13, "outOfBounds[0] - activeDestPtr = "))
         'Pst.Dec(result)
