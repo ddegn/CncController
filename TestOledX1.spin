@@ -1,4 +1,4 @@
-DAT programName         byte "TestOledX1", 0
+DAT programName         byte "TestOled", 0
 CON
 {  Test code to send bitmap data from SD to display.
 

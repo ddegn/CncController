@@ -681,7 +681,9 @@ PRI PropLogo(frozenState)
     Pst.Dec(Spi.GetRefreshCount)
     'PressToContinue'C
   
-  BounceBitmap(frozenState, @propBeanie, 32, 32, {
+  {BounceBitmap(frozenState, @propBeanie, 32, 32, {
+  } 100, 40, -1, -1, 0, 0, 20, 0, 1)   }
+  BounceBitmapNumber(frozenState, Header#BEANIE_SMALL_BITMAP, {
   } 100, 40, -1, -1, 0, 0, 20, 0, 1)
 
   if true 'debugFlag
@@ -700,6 +702,30 @@ PRI PropLogo(frozenState)
   if WatchForChange(@oledState, frozenState, 2_000)
     return }
 
+PUB BounceBitmapNumber(frozenState, bitmapIndex, startX, startY, directionX, directionY, {
+} limitX, limitY, delay, moves, transparentFlag) | bufferAddress, foregroundWidth, {
+} foregroundHeight
+
+  bufferAddress := Spi.GetPasmArea '* possible conflict with inverted buffer
+  
+  if oledFileType <> Header#GRAPHICS_OLED_TYPE '      
+    if oledFileType == Header#FONT_OLED_TYPE
+      LSd
+      Sd[Header#OLED_DATA_SD].CloseFile
+      CSd
+    
+    oledFileType := Header#GRAPHICS_OLED_TYPE
+
+  OpenFileToRead(Header#OLED_DATA_SD, Header.GetBitmapName(bitmapIndex), -1)
+
+  foregroundWidth := Header.GetBitmapWidth(bitmapIndex)
+  foregroundHeight := Header.GetBitmapHeight(bitmapIndex)
+  
+  Sd[Header#OLED_DATA_SD].ReadData(bufferAddress, foregroundWidth * foregroundHeight / 8)  
+  
+  BounceBitmap(frozenState, bufferAddress, foregroundWidth, foregroundHeight, startX, {
+  } startY, directionX, directionY, limitX, limitY, delay, moves, transparentFlag)
+ 
 PRI BounceBitmap(frozenState, foreground, foregroundWidth, foregroundHeight, {
 } startX, startY, directionX, directionY, limitX, limitY, delay, moves, transparentFlag) {
 } | position[2], direction[2]
@@ -1810,6 +1836,8 @@ PUB WriteData(instance, pointer, size)
 
 PUB BootPartition(instance, pointer)
 
+  if instance <> Header#OLED_DATA_SD
+    UnmountSd(Header#OLED_DATA_SD)
   result := Sd[instance].BootPartition(pointer)
 
 PUB ListEntries(instance, mode)
