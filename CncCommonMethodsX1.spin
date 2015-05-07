@@ -722,6 +722,8 @@ PUB BounceBitmapNumber(frozenState, bitmapIndex, startX, startY, directionX, dir
   foregroundHeight := Header.GetBitmapHeight(bitmapIndex)
   
   Sd[Header#OLED_DATA_SD].ReadData(bufferAddress, foregroundWidth * foregroundHeight / 8)  
+
+  PrintBitmap(bufferAddress, foregroundWidth, foregroundHeight)
   
   BounceBitmap(frozenState, bufferAddress, foregroundWidth, foregroundHeight, startX, {
   } startY, directionX, directionY, limitX, limitY, delay, moves, transparentFlag)
