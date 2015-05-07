@@ -152,7 +152,7 @@ PUB Setup(parameter0, parameter1) | cncCog
     Cnc.PressToContinue    
       }
   'repeat
-  'Cnc.PressToContinue
+  Cnc.PressToContinue
   'Motor.Start(Cnc.Get165Address)
    
   MainLoop

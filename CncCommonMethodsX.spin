@@ -865,7 +865,7 @@ PUB RestoreBackground
 
 VAR
   long previousActiveD
-PUB PrintBitMap(mapPtr, mapWidth, mapHeight) | rowIndex
+PUB PrintBitmap(mapPtr, mapWidth, mapHeight) | rowIndex
 '' height needs to be in multiple of 8
 
   mapHeight /= 8

@@ -97,6 +97,7 @@ targetInvert            long 0[4]
 invertFlag              long 0
 invertPoints            long 0[4]
 configNamePtr           long 0
+fontFileName            long 0-0
 
 machineState            byte Header#INIT_STATE
 units                   byte Header#MILLIMETER_UNIT 
@@ -106,6 +107,14 @@ previousLedState        byte 255
 maxDigits               byte Header#DEFAULT_MAX_DIGITS
 debugLock               byte 255
 sdLock                  byte 255
+oledFileType            byte Header#NO_ACTIVE_OLED_TYPE
+activeFont              byte Header#FREE_DESIGN_FONT '_5_x_7_FONT 'SIMPLYTROINICS_FONT '
+fontWidth               byte 0-0
+fontHeight              byte 0-0
+fontFirstChar           byte 0-0
+fontLastChar            byte 0-0
+lineLimit               byte 0-0
+columnLimit             byte 0-0
 {configData              byte 0[Header#CONFIG_SIZE] Header#DEFAULT_MACHINE_STATE, HOMED_OFFSET, NUNCHUCK_MODE_OFFSET
   VERSION_OFFSET_0, VERSION_OFFSET_1, VERSION_OFFSET_2, VERSION_OFFSET_3
   VERSION_OFFSET_4, VERSION_OFFSET_5, VERSION_OFFSET_6
@@ -137,15 +146,19 @@ PUB Start
   } Header#RTC_PIN_3)
   
   SetLocks
+  SetFont(activeFont)
   
   Pst.str(string(11, 13, "SD Card Driver Started"))
 
+  
+  MountSd(Header#OLED_DATA_SD)
+  
   result := cognew(OledMonitor, @oledStack)
   Pst.str(string(11, 13, "OledMonitor started on cog # "))
   Pst.Dec(result)   
   Pst.Char(".")
   'PressToContinue
-  
+ 
 PRI SetLocks
 
   debugLock := locknew
@@ -207,6 +220,17 @@ PUB ResetVerticalScroll
 
   activeScrollRow := 0
   
+PUB SetFont(fontIndex)
+
+  activeFont := fontIndex
+  fontWidth := Header.GetFontWidth(fontIndex)
+  fontHeight := Header.GetFontHeight(fontIndex)
+  fontFirstChar := Header.GetFontFirst(fontIndex)
+  fontLastChar := Header.GetFontLast(fontIndex)
+  lineLimit := (Header#OLED_WIDTH / fontHeight) - 1      
+  columnLimit := (Header#OLED_WIDTH / fontWidth) - 1
+  fontFileName := Header.GetFontName(fontIndex)
+  
 PUB ScrollString(localStr, pstFlag)
 
   if activeScrollRow < Header#OLED_LINES - 1
@@ -219,10 +243,157 @@ PUB ScrollString(localStr, pstFlag)
     Pst.ClearEnd
     Pst.Newline
     Pst.Str(localStr)
+  UpdateDisplay
     
+PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, bufferAddress, {
+} eightByteBuffer[2], tempPtr, localDebugFlag
+
+
+  L
+  Pst.str(string(11, 13, "WriteOledString(", 34))
+  Pst.Str(str)
+  Pst.str(string(34, ", "))
+  Pst.Dec(len)
+  Pst.str(string(", "))
+  Pst.Dec(row)
+  Pst.str(string(", "))
+  Pst.Dec(col)
+  Pst.str(string(", "))
+  Pst.Dec(transparentFlag)
+  Pst.str(string(")"))   
+  C
+
+  tempPtr := Spi.GetBuffer +  (row * 8) + col
+  
+  characterSize := 8 '((fontWidth + 7) / 8) * fontHeight ' *** think about this, which direction is up?
+
+  'Pst.str(string(11, 13, "characterSize = "))
+  'Pst.Dec(characterSize)
+    
+  {row *= fontHeight
+  row <#= Header#OLED_HEIGHT - fontHeight
+  col *= fontWidth
+  col <#= Header#OLED_WIDTH - fontWidth   }
+  bufferAddress := @eightByteBuffer 'Spi.GetPasmArea '* possible conflict with inverted buffer
+  
+  
+  
+  if oledFileType <> Header#FONT_OLED_TYPE ' ** is this needed?
+    if oledFileType == Header#GRAPHICS_OLED_TYPE
+      LSd
+      Sd[Header#OLED_DATA_SD].CloseFile
+      CSd
+    OpenFileToRead(Header#OLED_DATA_SD, fontFileName, -1)
+    oledFileType := Header#FONT_OLED_TYPE
+  'if activeFont <> Header#_5_x_7_FONT
+    'SetFont(Header#_5_x_7_FONT)
+    
+  
+  
+  repeat len
+    {Sd[Header#OLED_DATA_SD].FileSeek(((fontFirstChar #> byte[str] <# fontLastChar) - {
+    } fontFirstChar) * characterSize)
+    Sd[Header#OLED_DATA_SD].ReadData(bufferAddress, characterSize)
+     }
+    WriteChar(byte[str], row, col, transparentFlag)
+    {
+    if row == 0 and byte[str] => "0" and byte[str] =< "9"
+      L
+      Pst.str(string(11, 13, "Call FitBitmap("))
+      Pst.Dec(Spi.GetBuffer)
+      Pst.str(string(", "))
+      Pst.Dec(Header#OLED_WIDTH)
+      Pst.str(string(", "))
+      Pst.Dec(Header#OLED_HEIGHT)
+      Pst.str(string(", "))
+      Pst.Dec(bufferAddress)
+      Pst.str(string(", "))
+      Pst.Dec(fontWidth)
+      Pst.str(string(", "))
+      Pst.Dec(fontHeight)
+      Pst.str(string(", "))
+      Pst.Dec(col)
+      Pst.str(string(", "))
+      Pst.Dec(row)
+      Pst.str(string(", "))
+      Pst.Dec(transparentFlag)
+      Pst.str(string(")"))
+      Pst.str(string(11, 13, "byte[str] = "))
+      SafeTx(byte[str])  
+      
+      
+      Pst.str(string(11, 13, "bufferAddress"))
+      DisplayBytePixels(bufferAddress, 8)
+      Pst.str(string(11, 13, "tempPtr"))
+      DisplayBytePixels(tempPtr, 8)
+      C
+      localDebugFlag := 1
+    else
+      localDebugFlag := 0  
+      'PressToContinueC
+    FitBitmap(Spi.GetBuffer, Header#OLED_WIDTH, Header#OLED_HEIGHT, bufferAddress, {
+    } fontWidth, fontHeight, col, row, transparentFlag)', localDebugFlag)
+    }
+    col++ '+= fontWidth
+    tempPtr += characterSize '8
+    if row == 0 and byte[str] => "0" and byte[str] =< "9"
+      L
+      PressToContinueC
+    str++  
+    'Pst.str(string(11, 13, "col = "))
+    'Pst.Dec(col)
+  'UpdateDisplay
+  'Sd[Header#OLED_DATA_SD].CloseFile
+  
+'if fontHeight == 8
+ '   Write4x16String(str, len, row, col)
+PUB WriteChar(character, row, col, transparentFlag) | eightByteBuffer[2], bufferAddress
+'' For now all the characters have to be 8 pixels by 8 pixels.
+
+  bufferAddress := @eightByteBuffer 
+  
+  if oledFileType <> Header#FONT_OLED_TYPE
+    if oledFileType == Header#GRAPHICS_OLED_TYPE
+      LSd
+      Sd[Header#OLED_DATA_SD].CloseFile
+      CSd
+    OpenFileToRead(Header#OLED_DATA_SD, fontFileName, -1)
+    oledFileType := Header#FONT_OLED_TYPE
+
+  Sd[Header#OLED_DATA_SD].FileSeek(((fontFirstChar #> character <# fontLastChar) - {
+  } fontFirstChar) * 8)
+  Sd[Header#OLED_DATA_SD].ReadData(bufferAddress, 8)
+
+  col <#= Header#MAX_OLED_CHAR_COL_INDEX
+  row <#= Header#MAX_OLED_LINE_INDEX
+  
+  FitBitmap(Spi.GetBuffer, Header#OLED_WIDTH, Header#OLED_HEIGHT, bufferAddress, {
+  } fontWidth, fontHeight, col * 8, row * 8, transparentFlag)', localDebugFlag)
+      
+PUB DisplayBytePixels(localPtr, localSize)
+
+  'L
+  repeat localSize
+    Pst.Str(string(11, 13, "byte["))
+    Pst.Dec(localPtr)
+    Pst.str(string("] = $"))
+    Pst.Bin(byte[localPtr], 8)
+    Pst.str(string(" or "))
+    Pst.Dec(byte[localPtr])
+    localPtr++
+
+  'C
+      
 PUB Write4x16String(str, len, row, col)
 
-  Spi.Write4x16String(str, len, row, col)
+  'Write4x16String(str, len, row, col)
+  'if activeFont <> Header#_5_x_7_FONT
+    'SetFont(Header#_5_x_7_FONT)
+  WriteOledString(str, len, row, col, 0)
+
+'PUB Write4x16String(str, len, row, col)
+
+  'Spi.Write4x16String(str, len, row, col)
   
 PUB ScrollBuffer(lines)
 '' Positive values of "lines" will cause the buffer to scroll up, leaving room at the
@@ -246,7 +417,7 @@ PUB SetOled(state, labelPtr, dataPtrPtr, dataQuantity)
   longmove(@oledLabelPtr, @labelPtr, 3)
   'oledDataPtr, oledDataQuantity
   
-PRI OledMonitor : frozenState
+{PRI OledMonitor : frozenState
 
   Spi.Start(Spi#SSD1306_SWITCHCAPVCC, Spi#TYPE_128X64, @shiftRegisterOutput, @debugSpi)
   
@@ -263,6 +434,35 @@ PRI OledMonitor : frozenState
         \ReadoutOled(frozenState)
       Header#BITMAP_OLED:
       Header#GRAPH_OLED:
+    'Spi.clearDisplay
+    previousLedState := frozenState
+          }
+PRI OledMonitor : frozenState
+
+  Spi.Start(Spi#SSD1306_SWITCHCAPVCC, Spi#TYPE_128X64, @shiftRegisterOutput, @debugSpi)
+  
+  repeat
+    frozenState := oledState
+    if frozenState <> previousLedState
+      Spi.clearDisplay
+    case frozenState 'oledState
+      Header#DEMO_OLED:
+        \OledDemo(frozenState)
+      Header#MAIN_LOGO_OLED:
+        \PropLogoLoop(frozenState)
+      Header#AXES_READOUT_OLED:
+        \ReadoutOled(frozenState)
+        LSd
+        Sd[Header#OLED_DATA_SD].CloseFile
+        CSd
+      Header#BITMAP_OLED:
+      Header#GRAPH_OLED:
+      Header#PAUSE_MONITOR_OLED:
+        ' do nothing
+      Header#CLEAR_OLED:
+        if previousLedState <> Header#CLEAR_OLED
+          Spi.clearDisplay
+        
     'Spi.clearDisplay
     previousLedState := frozenState
       
@@ -328,9 +528,12 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
     Spi.clearDisplay
     repeat 1024
       if Spi.GetDisplayType == Spi#TYPE_128X32
-        Spi.Write5x7Char(GetRandomChar, ||k? // 4, ||q? // 16)
+        'Spi.Write5x7Char
+        WriteChar(GetRandomChar, ||k? // 4, ||q? // 16, 0)
+        
       else
-        Spi.Write5x7Char(GetRandomChar, ||k? // 8, ||q? // 16)
+        'Spi.Write5x7Char
+        WriteChar(GetRandomChar, ||k? // 8, ||q? // 16, 0)
       UpdateDisplay
       
       if WatchForChange(@oledState, frozenState, 2)
@@ -346,22 +549,30 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
     Spi.clearDisplay
     repeat q from 0 to 512 step 16
       bytemove(@tstr, Num.ToStr(||word[q + 2], Num#BIN17), 20)
-      Spi.write4x16String(@tstr[1], 16, 0, 0)
+      Write4x16String(@tstr[1], 16, 0, 0)
+      'Spi.write4x16String(@tstr[1], 16, 0, 0)
       bytemove(@tstr, Num.ToStr(||word[q + 0], Num#BIN17), 20)
-      Spi.write4x16String(@tstr[1], 16, 1, 0)
+      'Spi.w
+      Write4x16String(@tstr[1], 16, 1, 0)
       bytemove(@tstr, Num.ToStr(||word[q + 6], Num#BIN17), 20)
-      Spi.write4x16String(@tstr[1], 16, 2, 0)
+      'Spi.w
+      Write4x16String(@tstr[1], 16, 2, 0)
       bytemove(@tstr, Num.ToStr(||word[q + 4], Num#BIN17), 20)
-      Spi.write4x16String(@tstr[1], 16, 3, 0)
+      'Spi.w
+      Write4x16String(@tstr[1], 16, 3, 0)
       if Spi.GetDisplayType == Spi#TYPE_128X64
         bytemove(@tstr, Num.ToStr(||word[q + 10], Num#BIN17), 20)
-        Spi.write4x16String(@tstr[1], 16, 4, 0)
+        'Spi.w
+        Write4x16String(@tstr[1], 16, 4, 0)
         bytemove(@tstr, Num.ToStr(||word[q + 8], Num#BIN17), 20)
-        Spi.write4x16String(@tstr[1], 16, 5, 0)
+        'Spi.w
+        Write4x16String(@tstr[1], 16, 5, 0)
         bytemove(@tstr, Num.ToStr(||word[q + 14], Num#BIN17), 20)
-        Spi.write4x16String(@tstr[1], 16, 6, 0)
+        'Spi.w
+        Write4x16String(@tstr[1], 16, 6, 0)
         bytemove(@tstr, Num.ToStr(||word[q + 12], Num#BIN17), 20)
-        Spi.write4x16String(@tstr[1], 16, 7, 0)
+        'Spi.w
+        Write4x16String(@tstr[1], 16, 7, 0)
 
       UpdateDisplay
       
@@ -449,17 +660,37 @@ PRI PropLogo(frozenState)
   'bytemove(Spi.getBuffer,Spi.getSplash,Spi#LCD_BUFFER_SIZE_BOTH_TYPES)
   Spi.write1x8String(String("Parallax"), strsize(String("Parallax")))
   Spi.write2x8String(String("Prop"), strsize(String("Prop")), 1)
+
+  if true 'debugFlag
+    'L
+    Pst.str(string(11, 13, "PropLogo Before UpdateDisplay"))
+    Pst.str(string(11, 13, "refreshCount = "))
+    Pst.Dec(Spi.GetRefreshCount)
+    'C
+    
   UpdateDisplay
   SaveToBackground
   'waitcnt(clkfreq / 2 + cnt)
   if WatchForChange(@oledState, frozenState, 500)
     return
 
-  {BounceBitmap(frozenState, @propBeanie, 32, 32, {
-} 100, 40, -1, -1, 0, 0, 20, 60, 0)   }
-  BounceBitmap(frozenState, @propBeanie, 32, 32, {
-} 100, 40, -1, -1, 0, 0, 20, 0, 1)
+  if true 'debugFlag
+    'L
+    Pst.str(string(11, 13, "PropLogo Before Bounce"))
+    Pst.str(string(11, 13, "refreshCount = "))
+    Pst.Dec(Spi.GetRefreshCount)
+    'PressToContinue'C
   
+  BounceBitmap(frozenState, @propBeanie, 32, 32, {
+  } 100, 40, -1, -1, 0, 0, 20, 0, 1)
+
+  if true 'debugFlag
+    'L
+    Pst.str(string(11, 13, "PropLogo After Bounce"))
+    Pst.str(string(11, 13, "refreshCount = "))
+    Pst.Dec(Spi.GetRefreshCount)
+    'C
+    
  { repeat result from 0 to 8
     FitBitmap(Spi.GetBuffer, 128, 64, @propBeanie, 32, 32, 100 - result, 40 - result, 0)
     UpdateDisplay
@@ -486,11 +717,33 @@ PRI BounceBitmap(frozenState, foreground, foregroundWidth, foregroundHeight, {
   SaveToBackground
     
   repeat
-  
+
+  ' L
+    {Pst.str(string(11, 13, "BounceBitmap Before FitBitmap"))
+    Pst.str(string(11, 13, "refreshCount = "))
+    Pst.Dec(Spi.GetRefreshCount)  }
+    'PressToContinue'C
+    'PrintBitmap(foreground, foregroundWidth, foregroundHeight)
+    
     FitBitmap(Spi.GetBuffer, 128, 64, foreground, foregroundWidth, foregroundHeight, {
     } position[0], position[1], transparentFlag)
+
+    'L
+    {Pst.str(string(11, 13, "BounceBitmap After FitBitmap"))
+    Pst.str(string(11, 13, "refreshCount = "))
+    Pst.Dec(Spi.GetRefreshCount)}
+    'PressToContinue'C
+
     UpdateDisplay
+
+    'L
+   { Pst.str(string(11, 13, "BounceBitmap After UpdateDisplay"))
+    Pst.str(string(11, 13, "refreshCount = "))
+    Pst.Dec(Spi.GetRefreshCount) }
+    'PressToContinue'C
+    
     RestoreBackground
+    
     if position[0] == startX
       direction[0] := directionX
     elseif position[0] == limitX
@@ -617,7 +870,8 @@ PRI ReadoutOled8(frozenState) | labelPtr, dataPtrPtr, dataQuantity, len, row, bu
         elseif remainingSpace > 0
           Format.Chstr(result, " ", remainingSpace)
     
-        Spi.Write4x16String(@localBuffer, 16, row, 0)
+        'Spi.W
+        Write4x16String(@localBuffer, 16, row, 0)
         
       labelPtr += strsize(labelPtr) ' skip to next label
       labelPtr++ ' skip terminating zero
@@ -654,6 +908,30 @@ PUB RestoreBackground
 
 VAR
   long previousActiveD
+  
+PUB PrintBitmap(mapPtr, mapWidth, mapHeight) | rowIndex
+'' height needs to be in multiple of 8
+
+  mapHeight /= 8
+  rowIndex := mapHeight - 1
+  
+  repeat mapWidth
+    repeat result from rowIndex to 0
+      if result == rowIndex
+        Pst.str(string(11, 13, "Map $"))
+        Pst.Hex(mapPtr + (result * mapWidth), 8)
+        Pst.str(string(" | $"))
+      elseif result == 0
+        Pst.Hex(mapPtr + (result * mapWidth), 8)
+        Pst.str(string(" = %"))
+      else
+        Pst.Hex(mapPtr + (result * mapWidth), 8)
+        Pst.str(string(" | $"))
+        
+    repeat result from rowIndex to 0
+      Pst.Bin(byte[mapPtr + (result * mapWidth)], 8)
+    mapPtr++  
+      
 PUB FitBitmap(destPtr, destWidth, destHeight, sourcePtr, sourceWidth, sourceHeight, {
 } offsetX, offsetY, transparentFlag) | activeSourcePtr, activeDestPtr, arrayRowOffsetY, {
 } byteOffset, {destRows,} sourceRows, outOfBounds[4], bitAdjust
@@ -716,7 +994,7 @@ PUB FitBitmap(destPtr, destWidth, destHeight, sourcePtr, sourceWidth, sourceHeig
       quit
     'elseif activeDestPtr < outOfBounds[0]
       'next
-    if true 'byteOffset
+    if byteOffset 'true '
       if activeDestPtr < outOfBounds[0]
         outOfBounds[2] := outOfBounds[0]
       else
@@ -783,7 +1061,7 @@ PUB MoveTopBits(activeDestPtr, destWidth, activeSourcePtr, sourceWidth, byteOffs
 '' Top bits from source. Top bits are the lowest bits in a byte.
 '' The low bits from the source byte are moved to the high bits in the
 '' destination byte. High bits are in the lower area of the displayed byte.
-'' The terns "high" and "low" are opposite depending on if the bits
+'' The terms "high" and "low" are opposite depending on if the bits
 '' are in the display or in the byte.
 '' High and low will refer to the bit position within a byte. Top and
 '' bottom will refer to the position on the screen.
