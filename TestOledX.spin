@@ -86,7 +86,7 @@ OBJ
   Pst : "Parallax Serial TerminalDat"
   Format : "StrFmt"
   'Sd[1]: "SdSmall" 
-  Cnc : "CncCommonMethods"
+  Cnc : "CncCommonMethodsX"
   'Motor : "MotorControl"
    
 PUB Setup(parameter0, parameter1) | cncCog

@@ -1,4 +1,4 @@
-DAT programName         byte "TestOled", 0
+DAT programName         byte "TestOledX1", 0
 CON
 {  Test code to send bitmap data from SD to display.
 
@@ -86,7 +86,7 @@ OBJ
   Pst : "Parallax Serial TerminalDat"
   Format : "StrFmt"
   'Sd[1]: "SdSmall" 
-  Cnc : "CncCommonMethods"
+  Cnc : "CncCommonMethodsX1"
   'Motor : "MotorControl"
    
 PUB Setup(parameter0, parameter1) | cncCog
@@ -151,8 +151,8 @@ PUB Setup(parameter0, parameter1) | cncCog
     Cnc.ShowRegisters(result)
     Cnc.PressToContinue    
       }
-  repeat
-  Cnc.PressToContinue
+  'repeat
+  'Cnc.PressToContinue
   'Motor.Start(Cnc.Get165Address)
    
   MainLoop
