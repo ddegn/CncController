@@ -685,7 +685,7 @@ PRI PropLogo(frozenState)
   {BounceBitmap(frozenState, @propBeanie, 32, 32, {
   } 100, 40, -1, -1, 0, 0, 20, 0, 1)   }
   BounceBitmapNumber(frozenState, Header#BEANIE_SMALL_BITMAP, {
-  } 100, 40, -1, -1, 0, 0, 20, 0, 1)
+  } 100, 40, -1, -1, 0, 0, 0, 0, 1)
 
   if true 'debugFlag
     'L
@@ -972,10 +972,10 @@ PUB FitBitmapId(bitmapIndex, offsetX, offsetY, transparentFlag)
       CSd
     
     oledFileType := Header#GRAPHICS_OLED_TYPE
-  else
+  {else
     LSd
     Sd[Header#OLED_DATA_SD].CloseFile
-    CSd
+    CSd   }
 
   FitBitmap(Spi.GetBuffer, Header#OLED_WIDTH, Header#OLED_HEIGHT, {
   } Header.GetBitmapName(bitmapIndex), Header.GetBitmapWidth(bitmapIndex), {
@@ -1043,11 +1043,11 @@ PUB FitBitmap(destPtr, destWidth, destHeight, sourcePtr, sourceWidth, sourceHeig
     Pst.str(string(11, 13, "previousActiveD = "))
     Pst.Dec(previousActiveD)   }
   previousActiveD := activeDestPtr
-  if fromSdFlag
+  {if fromSdFlag
     Sd[Header#OLED_DATA_SD].FileSeek(activeSourcePtr)
     Pst.str(string(11, 13, "FileSeek("))
     Pst.Dec(activeDestPtr)
-    Pst.Char(")") 
+    Pst.Char(")")    }
   repeat sourceRows 
     if activeDestPtr => outOfBounds[1]
       'Pst.str(string(11, 13, "activeDestPtr => outOfBounds[1]"))
@@ -1067,7 +1067,11 @@ PUB FitBitmap(destPtr, destWidth, destHeight, sourcePtr, sourceWidth, sourceHeig
         outOfBounds[3] := outOfBounds[1]
       else
         outOfBounds[3] := activeDestPtr + destWidth
-        
+      if fromSdFlag
+        Sd[Header#OLED_DATA_SD].FileSeek(activeSourcePtr)
+        Pst.str(string(11, 13, "FileSeek("))
+        Pst.Dec(activeSourcePtr)
+        Pst.Char(")")   
       MoveTopBits(activeDestPtr, destWidth, activeSourcePtr, sourceWidth, byteOffset, {
       } outOfBounds[2], outOfBounds[3], transparentFlag, fromSdFlag)
       'UpdateDisplay
@@ -1081,7 +1085,13 @@ PUB FitBitmap(destPtr, destWidth, destHeight, sourcePtr, sourceWidth, sourceHeig
         outOfBounds[3] := outOfBounds[1]
       else
         outOfBounds[3] := activeDestPtr + (2 * destWidth)
-        
+
+      if fromSdFlag
+        Sd[Header#OLED_DATA_SD].FileSeek(activeSourcePtr)
+        Pst.str(string(11, 13, "FileSeek("))
+        Pst.Dec(activeSourcePtr)
+        Pst.Char(")")
+          
       MoveBottomBits(activeDestPtr + destWidth, destWidth, activeSourcePtr, sourceWidth, byteOffset, {
       } outOfBounds[2], outOfBounds[3], transparentFlag, fromSdFlag)
       'UpdateDisplay
@@ -1111,7 +1121,11 @@ PUB FitBitmap(destPtr, destWidth, destHeight, sourcePtr, sourceWidth, sourceHeig
   
     activeDestPtr += destWidth '* 8
     activeSourcePtr += sourceWidth '* 8
-    
+
+  LSd
+  Sd[Header#OLED_DATA_SD].CloseFile
+  CSd
+      
 PUB MoveOrOrBytes(destPtr, sourcePtr, size, transparentFlag, fromSdFlag)
 
   if transparentFlag
