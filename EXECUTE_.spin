@@ -46,7 +46,7 @@ VAR
   long fileIdNumber[Header#MAX_DATA_FILES]
   long dataFileCounter, highlightedFile
   
-  byte debugLock, spiLock
+  'byte debugLock, spiLock
   'byte tstr[32]
 
   'byte sdMountFlag[Header#NUMBER_OF_SD_INSTANCES]
@@ -96,9 +96,9 @@ PUB Setup(parameter0, parameter1) | cncCog
   Pst.Start(115_200)
  
   'cognew(OledDemo, @stack)
-  debugLock := locknew
-  spiLock := locknew
-  Cnc.SetDebugLock(debugLock)
+  'debugLock := locknew
+  'spiLock := locknew
+  'Cnc.SetDebugLock(debugLock)
  
   repeat
     result := Pst.RxCount
@@ -109,7 +109,7 @@ PUB Setup(parameter0, parameter1) | cncCog
 
   'TestMath
   
-  cncCog := Cnc.Start(spiLock)
+  cncCog := Cnc.Start'(spiLock)
 
   adcPtr := Cnc.GetAdcPtr
   buttonMask := 1 << Header#JOYSTICK_BUTTON_165

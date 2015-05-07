@@ -151,7 +151,7 @@ PUB Setup(parameter0, parameter1) | cncCog
     Cnc.ShowRegisters(result)
     Cnc.PressToContinue    
       }
-  repeat
+  'repeat
   Cnc.PressToContinue
   'Motor.Start(Cnc.Get165Address)
    
