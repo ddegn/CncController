@@ -71,7 +71,7 @@ VAR
 
 
   'long lastRefreshTime, refreshInterval
-  long oledStack[175]
+  long oledStack[Header#MONITOR_OLED_STACK_SIZE]
   long sdErrorNumber, sdErrorString, sdTryCount
   long filePosition[Header#NUMBER_OF_AXES]
   long globalMultiplier, globalDecPoints
@@ -102,13 +102,14 @@ fontFileName            long 0-0
 machineState            byte Header#INIT_STATE
 units                   byte Header#MILLIMETER_UNIT 
 delimiter               byte 13, 10, ",", 9, 0
+targetOledState         byte Header#DEMO_OLED
 oledState               byte Header#DEMO_OLED
-previousLedState        byte 255
+previousOledState        byte 255
 maxDigits               byte Header#DEFAULT_MAX_DIGITS
 debugLock               byte 255
 sdLock                  byte 255
 oledFileType            byte Header#NO_ACTIVE_OLED_TYPE
-activeFont              byte Header#FREE_DESIGN_FONT '_5_x_7_FONT 'SIMPLYTROINICS_FONT '
+activeFont              byte Header#SIMPLYTROINICS_FONT 'FREE_DESIGN_FONT '_5_x_7_FONT '
 previousBitmap          byte 255
 fontWidth               byte 0-0
 fontHeight              byte 0-0
@@ -116,6 +117,7 @@ fontFirstChar           byte 0-0
 fontLastChar            byte 0-0
 lineLimit               byte 0-0
 columnLimit             byte 0-0
+characterFlag           byte 0
 rowOfBytes              byte 0[128]
 {configData              byte 0[Header#CONFIG_SIZE] Header#DEFAULT_MACHINE_STATE, HOMED_OFFSET, NUNCHUCK_MODE_OFFSET
   VERSION_OFFSET_0, VERSION_OFFSET_1, VERSION_OFFSET_2, VERSION_OFFSET_3
@@ -154,13 +156,16 @@ PUB Start
 
   
   MountSd(Header#OLED_DATA_SD)
+
+  longfill(@oledStack, Header#STACK_CHECK_LONG, Header#MONITOR_OLED_STACK_SIZE)
   
   result := cognew(OledMonitor, @oledStack)
   Pst.str(string(11, 13, "OledMonitor started on cog # "))
   Pst.Dec(result)   
   Pst.Char(".")
   'PressToContinue
- 
+  result := @oledStack
+  
 PRI SetLocks
 
   debugLock := locknew
@@ -251,7 +256,7 @@ PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, buffer
 } eightByteBuffer[2], tempPtr, localDebugFlag
 
 
-  L
+ { L
   Pst.str(string(11, 13, "WriteOledString(", 34))
   Pst.Str(str)
   Pst.str(string(34, ", "))
@@ -263,8 +268,9 @@ PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, buffer
   Pst.str(string(", "))
   Pst.Dec(transparentFlag)
   Pst.str(string(")"))   
-  C
-
+  C  }
+  characterFlag := 0
+  
   tempPtr := Spi.GetBuffer +  (row * 8) + col
   
   characterSize := 8 '((fontWidth + 7) / 8) * fontHeight ' *** think about this, which direction is up?
@@ -280,13 +286,13 @@ PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, buffer
   
   
   
-  if oledFileType <> Header#FONT_OLED_TYPE ' ** is this needed?
+  {if oledFileType <> Header#FONT_OLED_TYPE ' ** is this needed?
     if oledFileType == Header#GRAPHICS_OLED_TYPE
       LSd
       Sd[Header#OLED_DATA_SD].CloseFile
       CSd
     OpenFileToRead(Header#OLED_DATA_SD, fontFileName, -1)
-    oledFileType := Header#FONT_OLED_TYPE
+    oledFileType := Header#FONT_OLED_TYPE     }
   'if activeFont <> Header#_5_x_7_FONT
     'SetFont(Header#_5_x_7_FONT)
     
@@ -298,6 +304,7 @@ PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, buffer
     Sd[Header#OLED_DATA_SD].ReadData(bufferAddress, characterSize)
      }
     WriteChar(byte[str], row, col, transparentFlag)
+    characterFlag := 1
     {
     if row == 0 and byte[str] => "0" and byte[str] =< "9"
       L
@@ -338,9 +345,9 @@ PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, buffer
     }
     col++ '+= fontWidth
     tempPtr += characterSize '8
-    if row == 0 and byte[str] => "0" and byte[str] =< "9"
+    {if row == 0 and byte[str] => "0" and byte[str] =< "9"
       L
-      PressToContinueC
+      PressToContinueC   }
     str++  
     'Pst.str(string(11, 13, "col = "))
     'Pst.Dec(col)
@@ -352,26 +359,55 @@ PUB WriteOledString(str, len, row, col, transparentFlag) | characterSize, buffer
 PUB WriteChar(character, row, col, transparentFlag) | eightByteBuffer[2], bufferAddress
 '' For now all the characters have to be 8 pixels by 8 pixels.
 
-  bufferAddress := @eightByteBuffer 
+  bufferAddress := @rowOfBytes 'eightByteBuffer
+ { D
+  Pst.str(string(11, 13, "oledFileType = "))
+  Pst.Dec(oledFileType)
+  C  }
   
   if oledFileType <> Header#FONT_OLED_TYPE
     if oledFileType == Header#GRAPHICS_OLED_TYPE
+      'D
+      'Pst.str(string(11, 13, "CloseFile"))
       LSd
       Sd[Header#OLED_DATA_SD].CloseFile
       CSd
+      'C
     OpenFileToRead(Header#OLED_DATA_SD, fontFileName, -1)
     oledFileType := Header#FONT_OLED_TYPE
 
+  'LSd
+  'Sd[Header#OLED_DATA_SD].CloseFile
+  'CSd
+  'ifnot characterFlag 
+  OpenFileToRead(Header#OLED_DATA_SD, fontFileName, -1)
+  {D
+  Pst.str(string(11, 13, "FileSeek("))
+  Pst.Dec(((fontFirstChar #> character <# fontLastChar) - fontFirstChar) * 8)
+  Pst.str(string(")"))
+  C  }
   Sd[Header#OLED_DATA_SD].FileSeek(((fontFirstChar #> character <# fontLastChar) - {
-  } fontFirstChar) * 8)
-  Sd[Header#OLED_DATA_SD].ReadData(bufferAddress, 8)
+    } fontFirstChar) * 8)
+  'Sd[Header#OLED_DATA_SD].ReadData(bufferAddress, 8)
+  Sd[Header#OLED_DATA_SD].ReadData(@rowOfBytes, 8)
 
   col <#= Header#MAX_OLED_CHAR_COL_INDEX
   row <#= Header#MAX_OLED_LINE_INDEX
-  
-  FitBitmap(Spi.GetBuffer, Header#OLED_WIDTH, Header#OLED_HEIGHT, bufferAddress, {
+ { D
+  Pst.str(string(11, 13, "character = "))
+  SafeTx(character)
+  Pst.str(string(", col = "))
+  Pst.Dec(col)
+  Pst.str(string(", row ="))
+  Pst.Dec(row)
+  C   
+  D
+  PrintBitmap(@rowOfBytes, 8, 8)
+  C   }
+  'D
+  FitBitmap(Spi.GetBuffer, Header#OLED_WIDTH, Header#OLED_HEIGHT, @rowOfBytes, {
   } fontWidth, fontHeight, col * 8, row * 8, transparentFlag, 0)', localDebugFlag)
-      
+  'C    
 PUB DisplayBytePixels(localPtr, localSize)
 
   'L
@@ -414,7 +450,9 @@ PUB ScrollBuffer(lines)
     
 PUB SetOled(state, labelPtr, dataPtrPtr, dataQuantity)
 
-  oledState := state
+  targetOledState := state 
+
+  repeat until oledState == targetOledState
 
   longmove(@oledLabelPtr, @labelPtr, 3)
   'oledDataPtr, oledDataQuantity
@@ -425,7 +463,7 @@ PUB SetOled(state, labelPtr, dataPtrPtr, dataQuantity)
   
   repeat
     frozenState := oledState
-    if frozenState <> previousLedState
+    if frozenState <> previousOledState
       Spi.clearDisplay
     case frozenState 'oledState
       Header#DEMO_OLED:
@@ -437,36 +475,44 @@ PUB SetOled(state, labelPtr, dataPtrPtr, dataQuantity)
       Header#BITMAP_OLED:
       Header#GRAPH_OLED:
     'Spi.clearDisplay
-    previousLedState := frozenState
+    previousOledState := frozenState
           }
-PRI OledMonitor : frozenState
+PRI OledMonitor ': frozenState
 
   Spi.Start(Spi#SSD1306_SWITCHCAPVCC, Spi#TYPE_128X64, @shiftRegisterOutput, @debugSpi)
   
   repeat
-    frozenState := oledState
-    if frozenState <> previousLedState
+    oledState := targetOledState
+      
+    'frozenState := oledState ' we probably don't need frozenState now
+    if oledState <> previousOledState
       Spi.clearDisplay
-    case frozenState 'oledState
+    case oledState
       Header#DEMO_OLED:
-        \OledDemo(frozenState)
+        \OledDemo(oledState)
+        'LSd
+        'Sd[Header#OLED_DATA_SD].CloseFile
+        'CSd
       Header#MAIN_LOGO_OLED:
-        \PropLogoLoop(frozenState)
+        \PropLogoLoop(oledState)
+        'LSd
+        'Sd[Header#OLED_DATA_SD].CloseFile
+        'CSd
       Header#AXES_READOUT_OLED:
-        \ReadoutOled(frozenState)
-        LSd
-        Sd[Header#OLED_DATA_SD].CloseFile
-        CSd
+        \ReadoutOled(oledState)
+        'LSd
+        'Sd[Header#OLED_DATA_SD].CloseFile
+        'CSd
       Header#BITMAP_OLED:
       Header#GRAPH_OLED:
       Header#PAUSE_MONITOR_OLED:
         ' do nothing
       Header#CLEAR_OLED:
-        if previousLedState <> Header#CLEAR_OLED
+        if previousOledState <> Header#CLEAR_OLED
           Spi.clearDisplay
         
     'Spi.clearDisplay
-    previousLedState := frozenState
+    previousOledState := oledState
       
 PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
 
@@ -482,8 +528,8 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
     ''**********************************
     PropLogo(frozenState)
 
-    'result := WatchForChange(@oledState, Header#DEMO_OLED, 2_000)
-    if WatchForChange(@oledState, frozenState, 2_000) 'result
+    'result := WatchForChange(@targetOledState, Header#DEMO_OLED, 2_000)
+    if WatchForChange(@targetOledState, frozenState, 2_000) 'result
       'Pst.str(string(11, 13, "result = "))
       'Pst.Dec(result)   
       'waitcnt(clkfreq * 3 + cnt)
@@ -496,12 +542,12 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
     Spi.write4x16String(String("from . . ."), strsize(String("from . . .")), 4, 2)
     UpdateDisplay
     
-    if WatchForChange(@oledState, frozenState, 2_000)
+    if WatchForChange(@targetOledState, frozenState, 2_000)
       return
     bytemove(Spi.getBuffer, Spi.getSplash, Spi#OLED_BUFFER_SIZE)
     UpdateDisplay
 
-    if WatchForChange(@oledState, frozenState, 3_000)
+    if WatchForChange(@targetOledState, frozenState, 3_000)
       return
         }
     {Spi.write1x8String(String("Parallax"), strsize(String("Parallax")))
@@ -519,7 +565,7 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
       Spi.invertDisplay(false)
     UpdateDisplay
 
-    if WatchForChange(@oledState, frozenState, 3_000)
+    if WatchForChange(@targetOledState, frozenState, 3_000)
       return
     
     ''******************************************
@@ -538,7 +584,7 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
         WriteChar(GetRandomChar, ||k? // 8, ||q? // 16, 0)
       UpdateDisplay
       
-      if WatchForChange(@oledState, frozenState, 2)
+      if WatchForChange(@targetOledState, frozenState, 2)
         return
              
     
@@ -578,7 +624,7 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
 
       UpdateDisplay
       
-      if WatchForChange(@oledState, frozenState, 100)
+      if WatchForChange(@targetOledState, frozenState, 100)
         return
                
     ''****************************************************
@@ -590,22 +636,22 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
     if Spi.GetDisplayType == Spi#TYPE_128X64
       Spi.write2x8String(String("  Inc.  "), strsize(String("  Inc.  ")), 1)
 
-    if WatchForChange(@oledState, frozenState, 1_000)
+    if WatchForChange(@targetOledState, frozenState, 1_000)
       return
     
     Spi.startscrollleft(0, 31)
 
-    if WatchForChange(@oledState, frozenState, 4_000)
+    if WatchForChange(@targetOledState, frozenState, 4_000)
       return
 
     Spi.startscrollright(0, 31)
     
-    if WatchForChange(@oledState, frozenState, 4_000)
+    if WatchForChange(@targetOledState, frozenState, 4_000)
       return
 
     Spi.stopscroll
     
-    if WatchForChange(@oledState, frozenState, 1_000)
+    if WatchForChange(@targetOledState, frozenState, 1_000)
       return
 
     ''******************************************
@@ -625,7 +671,7 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
         j := h
         k := i
      
-      if WatchForChange(@oledState, frozenState, 10)
+      if WatchForChange(@targetOledState, frozenState, 10)
         return
 
     
@@ -645,14 +691,14 @@ PRI OledDemo(frozenState) | h, i, j, k, q, r, s, count
         j := h
         k := i
       
-      if WatchForChange(@oledState, frozenState, 10)
+      if WatchForChange(@targetOledState, frozenState, 10)
         return
 
 PRI PropLogoLoop(frozenState)
   
   repeat
     PropLogo(frozenState)
-    if WatchForChange(@oledState, frozenState, 10_000)
+    if WatchForChange(@targetOledState, frozenState, 10_000)
       return
     
 PRI PropLogo(frozenState)
@@ -664,44 +710,46 @@ PRI PropLogo(frozenState)
   Spi.write2x8String(String("Prop"), strsize(String("Prop")), 1)
 
   if true 'debugFlag
-    'L
+    D
     Pst.str(string(11, 13, "PropLogo Before UpdateDisplay"))
     Pst.str(string(11, 13, "refreshCount = "))
     Pst.Dec(Spi.GetRefreshCount)
-    'C
+    C
     
   UpdateDisplay
   SaveToBackground
   'waitcnt(clkfreq / 2 + cnt)
-  if WatchForChange(@oledState, frozenState, 500)
+  if WatchForChange(@targetOledState, frozenState, 500)
     return
 
   if true 'debugFlag
-    'L
+    D
     Pst.str(string(11, 13, "PropLogo Before Bounce"))
     Pst.str(string(11, 13, "refreshCount = "))
     Pst.Dec(Spi.GetRefreshCount)
-    'PressToContinue'C
+    C 'PressToContinue'C
   
   {BounceBitmap(frozenState, @propBeanie, 32, 32, {
-  } 100, 40, -1, -1, 0, 0, 20, 0, 1)   }
-  BounceBitmapNumber(frozenState, Header#BEANIE_SMALL_BITMAP, {
+  } 100, 40, -1, -1, 0, 0, 20, 0, 1)   } 
+  {BounceBitmapNumber(frozenState, Header#BEANIE_SMALL_BITMAP, {
+  } 100, 40, -1, -1, 0, 0, 0, 0, 1) }
+  BounceBitmapNumber(frozenState, Header#LMR_LARGE_BITMAP, {
   } 100, 40, -1, -1, 0, 0, 0, 0, 1)
 
   if true 'debugFlag
-    'L
+    D
     Pst.str(string(11, 13, "PropLogo After Bounce"))
     Pst.str(string(11, 13, "refreshCount = "))
     Pst.Dec(Spi.GetRefreshCount)
-    'C
+    C
     
  { repeat result from 0 to 8
     FitBitmap(Spi.GetBuffer, 128, 64, @propBeanie, 32, 32, 100 - result, 40 - result, 0)
     UpdateDisplay
     RestoreBackground
-    if WatchForChange(@oledState, frozenState, 200)
+    if WatchForChange(@targetOledState, frozenState, 200)
       return
-  if WatchForChange(@oledState, frozenState, 2_000)
+  if WatchForChange(@targetOledState, frozenState, 2_000)
     return }
 
 PUB BounceBitmapNumber(frozenState, bitmapIndex, startX, startY, directionX, directionY, {
@@ -736,8 +784,9 @@ PRI BounceBitmap(frozenState, bitmapIndex, {
 '' The current buffer will be treated as the background bitmap.
 '' Zero moves will cause this method to repeat a long time if not stopped.
 
+  D
   Pst.str(string(11, 13, "Bounce"))
-  'Pst.Dec(destPtr)
+  C
   
   direction[0] := directionX
   direction[1] := directionY
@@ -797,7 +846,7 @@ PRI BounceBitmap(frozenState, bitmapIndex, {
     PressToContinue
       Pst.str(string("down"))  }
       
-    if WatchForChange(@oledState, frozenState, delay)
+    if WatchForChange(@targetOledState, frozenState, delay)
       return
   while --moves    
   {
@@ -918,6 +967,12 @@ PUB WatchForChange(localPtr, expectedValue, timeToWait) | localTime
   until cnt - localTime > timeToWait or result
 
   if result
+    D
+      Pst.str(string(11, 13, "CloseFile"))
+    LSd
+    Sd[Header#OLED_DATA_SD].CloseFile
+    CSd
+    C
     abort
               
 PUB GetRandomChar | randomChar
@@ -990,7 +1045,7 @@ PUB FitBitmap(destPtr, destWidth, destHeight, sourcePtr, sourceWidth, sourceHeig
 '' If reading bitmap from SD card, "sourcePtr" should contain the name of the file
 '' holding the bitmap.
 
-  if fromSdFlag
+  if fromSdFlag 
     OpenFileToRead(Header#OLED_DATA_SD, sourcePtr, -1)
     sourcePtr := 0
     
@@ -1000,11 +1055,11 @@ PUB FitBitmap(destPtr, destWidth, destHeight, sourcePtr, sourceWidth, sourceHeig
   Pst.Dec(destPtr)
   Pst.str(string(11, 13, "sourcePtr = "))
   Pst.Dec(sourcePtr)}
-  Pst.str(string(11, 13, "FitBitmap, offsetX = "))
+{  Pst.str(string(11, 13, "FitBitmap, offsetX = "))
   'Pst.str(string(11, 13, "offsetX = "))
   Pst.Dec(offsetX)
   Pst.str(string(", old offsetY = "))
-  Pst.Dec(offsetY)  
+  Pst.Dec(offsetY)  }
 
   'byteOffset := 7 - (offsetY // 8)
   byteOffset := offsetY // 8
@@ -1773,21 +1828,21 @@ PUB OpenFileToRead(sdInstance, basePtr, fileToOpen)
     result := Header#READ_FILE_ERROR_OTHER
     CSd
     return
-  elseif result
-    Pst.str(string(11, 13, "MountSd returned = "))
-    Pst.str(result)
-    waitcnt(clkfreq * 2 + cnt)
+  ''elseif result
+    ''Pst.str(string(11, 13, "MountSd returned = "))
+    ''Pst.str(result)
+    'waitcnt(clkfreq * 2 + cnt)
     
   if fileToOpen => 0
     Decx(fileToOpen, 4, basePtr + Header#NUMBER_LOC_IN_FILE_NAME)
-  Pst.str(string(11, 13, "Looking for file ", 34))
-  Pst.str(basePtr)
-  Pst.char(34)
+  ''Pst.str(string(11, 13, "Looking for file ", 34))
+  ''Pst.str(basePtr)
+  ''Pst.char(34)
   sdErrorString := \Sd[sdInstance].openFile(basePtr, "R")
   if strcomp(sdErrorString, basePtr)
-    Pst.str(string(11, 13, "File ", 34))
-    Pst.str(basePtr)
-    Pst.str(string(34, " found."))
+    ''Pst.str(string(11, 13, "File ", 34))
+    ''Pst.str(basePtr)
+    ''Pst.str(string(34, " found."))
     result := Header#READ_FILE_SUCCESS
   else
     Pst.str(string(11, 13, "File ", 34))
@@ -1960,12 +2015,12 @@ PUB MountSd(sdInstance)
 '' sdLock should be set (if used) prior to calling this method.
 '' Returns 1 is no SD card is found.
 
-  Pst.str(string(11, 13, "MountSd Method"))
+  ''Pst.str(string(11, 13, "MountSd Method"))
   if sdMountFlag[sdInstance]
     result := string("SD Card Already Mounted")
     return  
   sdErrorNumber := Sd[sdInstance].mountPartition(0)
-  Pst.str(string(11, 13, "After mount attempt.")) 
+  ''Pst.str(string(11, 13, "After mount attempt.")) 
   if sdErrorNumber
     sdFlag := Header#NOT_FOUND_SD
     result := 1
@@ -2349,14 +2404,6 @@ machineStateTxt         byte "INIT_STATE", 0
                         byte "MANUAL_NUNCHUCK_STATE", 0
 
 DAT
-propBeanie    byte $04, $0E, $0E, $0E, $0E, $0C, $0C, $0C, $0C, $0C, $0C, $0C, $04, $04, $04, $F4
-              byte $F4, $04, $04, $04, $82, $06, $06, $06, $06, $06, $06, $07, $0F, $0E, $0E, $04
-              byte $00, $00, $00, $80, $E0, $F0, $F8, $1C, $0E, $02, $01, $00, $00, $F8, $FF, $FF
-              byte $FF, $FF, $FC, $00, $00, $01, $03, $06, $1C, $F8, $F0, $E0, $80, $00, $00, $00
-              byte $00, $00, $7C, $5F, $9F, $9F, $80, $88, $88, $88, $08, $08, $0E, $0F, $0F, $0F
-              byte $0F, $0F, $0F, $0F, $08, $08, $88, $88, $88, $80, $9F, $9F, $5F, $7C, $00, $00
-              byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $01, $01, $01, $01, $01
-              byte $01, $01, $01, $01, $01, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
 {
 lmrVB   ' vertical bytes 
               byte $00,$00,$00,$00,$00,$00,$00,$C8,$E4,$C0,$C0,$88,$08,$18,$10,$20
@@ -2367,39 +2414,4 @@ lmrVB   ' vertical bytes
               byte $6F,$67,$E7, $EF, $FB,$7F,$7F,$39,$3D,$7F,$7D,$71,$24,$39,$1E,$08
               byte $00,$00,$00,$00,$00,$01,$01,$03,$03,$07,$07,$0F,$1F,$1F,$3E,$3C
               byte $18,$1D,$0E,$07,$00,$00,$00,$00
-
-
-
-lmr64         byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $80, $40
-              byte $20, $10, $08, $00, $04, $00, $82, $82, $80, $00, $C1, $01, $01, $81, $81, $00
-              byte $02, $02, $02, $04, $04, $08, $10, $10, $20, $C0, $00, $00, $00, $00, $00, $00
-              byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-              byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $E0, $0C, $C2, $E0, $F8
-              byte $FC, $FC, $F8, $50, $90, $C0, $80, $80, $81, $01, $01, $03, $02, $07, $04, $0E
-              byte $37, $27, $46, $8C, $16, $60, $40, $00, $00, $00, $01, $06, $30, $00, $00, $00
-              byte $00, $00, $80, $80, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-              byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $1F, $C0, $1F, $F7, $EF
-              byte $BF, $3F, $FF, $FF, $FE, $FF, $7E, $F0, $F4, $FC, $F0, $F0, $F0, $F0, $E0, $F0
-              byte $C6, $F0, $F0, $F0, $F1, $CA, $7E, $3C, $3E, $98, $D0, $C8, $E8, $E5, $70, $32
-              byte $18, $0D, $0C, $1E, $1F, $3F, $80, $C0, $80, $80, $00, $00, $00, $00, $00, $00
-              byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $C2, $A8, $33
-              byte $22, $C3, $07, $07, $0F, $1F, $BF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF, $F7
-              byte $F3, $F3, $F9, $9D, $8C, $06, $06, $07, $0F, $8F, $5F, $7F, $7F, $FF, $FF, $7F
-              byte $FE, $FE, $F8, $0C, $7A, $7D, $FE, $FE, $FC, $1F, $00, $00, $00, $00, $00, $00
-              byte $00, $E0, $60, $B0, $F0, $E8, $D4, $CC, $AA, $A6, $55, $4B, $AB, $96, $56, $4D
-              byte $AE, $9B, $56, $34, $AC, $68, $58, $D2, $B3, $53, $55, $95, $95, $7F, $FF, $FF
-              byte $FF, $FF, $7F, $3F, $3F, $7F, $7F, $C6, $99, $BE, $FF, $FF, $BF, $DE, $C7, $E1
-              byte $F3, $F6, $FF, $F9, $57, $93, $4B, $29, $25, $13, $93, $CA, $CC, $E8, $F0, $00
-              byte $00, $07, $0E, $17, $2B, $77, $5E, $C1, $BF, $7D, $7F, $FF, $FE, $FE, $FD, $FD
-              byte $F2, $FA, $E5, $F5, $C2, $EA, $A5, $55, $4A, $AB, $85, $56, $4A, $AD, $9E, $5A
-              byte $14, $B4, $A8, $78, $78, $F8, $FC, $FC, $FE, $FF, $7F, $7F, $3F, $3F, $1F, $0F
-              byte $1F, $1F, $2F, $7F, $5F, $6D, $7F, $3E, $19, $1D, $0E, $0F, $07, $07, $03, $00
-              byte $00, $00, $00, $00, $00, $00, $00, $00, $01, $01, $03, $02, $06, $07, $0D, $1F
-              byte $1B, $3F, $37, $5F, $7F, $BF, $FF, $7F, $FF, $86, $F6, $75, $ED, $DA, $F2, $C9
-              byte $49, $24, $A2, $D2, $F9, $F9, $FF, $7D, $00, $00, $00, $00, $00, $00, $00, $00
-              byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-              byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-              byte $00, $00, $00, $00, $00, $00, $01, $01, $03, $03, $06, $05, $0E, $0B, $0D, $0F
-              byte $07, $07, $03, $01, $01, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-              byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
                  } 

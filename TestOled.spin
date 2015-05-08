@@ -62,7 +62,8 @@ DAT
 
 designFileIndex         long -1
 lowerZAmount            long Header#DEFAULT_Z_DISTANCE
-
+measuredStack           long 0
+oledStackPtr            long 0
 'microStepMultiplier     long 1
 'machineState            byte Header#INIT_STATE
 stepPin                 byte Header#STEP_X_PIN, Header#STEP_Y_PIN, Header#STEP_Z_PIN
@@ -89,7 +90,7 @@ OBJ
   Cnc : "CncCommonMethods"
   'Motor : "MotorControl"
    
-PUB Setup(parameter0, parameter1) | cncCog
+PUB Setup(parameter0, parameter1) '| cncCog
 
   configPtr := Header.GetConfigName
   fileNamePtr := Header.GetFileName
@@ -106,14 +107,14 @@ PUB Setup(parameter0, parameter1) | cncCog
 
   'TestMath
   
-  cncCog := Cnc.Start
+  oledStackPtr := Cnc.Start
 
   adcPtr := Cnc.GetAdcPtr
   buttonMask := 1 << Header#JOYSTICK_BUTTON_165
   
-  Pst.str(string(11, 13, "Helper object started on cog #"))
-  Pst.Dec(cncCog)   
-  Pst.Char(".")   
+  Pst.str(string(11, 13, "Helper object started."))
+  'Pst.Dec(cncCog)   
+  'Pst.Char(".")   
 
   waitcnt(clkfreq * 2 + cnt)
 
@@ -171,10 +172,58 @@ PUB MainLoop | localIndex, localBuffer[5]
       byte[result] := 0
       Cnc.ScrollString(@localBuffer, 1)
       'Cnc.UpdateDisplay
+      'DebugStack
+      
       Cnc.PressToContinue
     
     AdcJoystickLoop
       
+PRI DebugStack '| measuredStack 
+
+  'measuredStack := 0
+  'repeat
+
+  Pst.Home
+  Pst.ClearEnd
+  Pst.NewLine
+   
+  measuredStack := CheckStack(oledStackPtr, Header#MONITOR_OLED_STACK_SIZE, measuredStack, Header#STACK_CHECK_LONG)
+  Pst.Str(string(" The OLED cog has so far used "))
+  Pst.Dec(measuredStack)
+  Pst.Str(string(" of the "))
+  Pst.Dec(Header#MONITOR_OLED_STACK_SIZE)
+  Pst.Str(string(" longs originally set aside for it."))
+  Pst.ClearEnd
+  Pst.NewLine
+  'Pst.Str(string(" ledLoopCount =  "))
+ ' Pst.Dec(ledLoopCount)
+  'Pst.ClearEnd
+  'Pst.NewLine
+  'Pst.ClearEnd
+  'Pst.NewLine
+  'DumpBufferLong(oledStackPtr, Header#MONITOR_OLED_STACK_SIZE, 12)
+  'Pst.ClearEnd
+  'Pst.NewLine
+  'Pst.ClearEnd
+  'Pst.ClearBelow         
+  
+PRI CheckStack(localPtr, localSize, previousSize, fillLong)
+'' Find the highest none zero long in the section
+'' of RAM "localSize" longs in size and starting
+'' at "localPtr". The return value will be at
+'' least the size of "previousSize" and will only
+'' be larger if a non-zero long is found at a higher
+'' memory location than in previous calls to
+'' the method.
+
+  localSize--
+  previousSize--
+  repeat result from 0 to localSize
+    if long[localPtr][result] <> fillLong
+      if result > previousSize
+        previousSize := result
+  result := ++previousSize
+
 PUB Adc3PotsLoop | localIndex, row, pointer
 
   Pst.Str(string(11, 13, "Adc3PotsLoop Method")) 
@@ -263,7 +312,7 @@ PUB AdcJoystickLoop | localIndex, buttonValue, previousButton, {
 
   oledPtr[5] := oledPtr[4] + 4
   oledPtr[6] := oledPtr[4] + 8
-  oledPtr[0] := @zero 'oledPtr[4] + 12
+  oledPtr[0] := oledPtr[4] + 12 '@zero '
   oledPtr[1] := oledPtr[4] + 16
   oledPtr[2] := oledPtr[4] + 20
   oledPtr[7] := @timer
@@ -295,6 +344,9 @@ PUB AdcJoystickLoop | localIndex, buttonValue, previousButton, {
   'Pst.RxFlush
   C }'150505a
   repeat
+    'L
+    'DebugStack
+    'C
     Cnc.ReadAdc
     {'150505a
     L
