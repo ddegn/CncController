@@ -1,4 +1,4 @@
-DAT objectName          byte "MotorControlX", 0
+DAT objectName          byte "MotorControlX1", 0
 CON
 {{
 
@@ -19,51 +19,7 @@ minDelay                long 80_000 '80_000
 delayChange             long 800 '8_000
 accelInterval           long 40_000 '' *** This might be a problem.
 accelIntervals          long 0-0
-
-address165              long 0-0
-debugActiveDelayS       long 0-0
-debugActiveDelay        long 0-0
-debugDelayTotalS        long 0-0
-debugDelayTotal         long 0-0   
-debugFullStepsF         long 0-0
-debugAddress5           long 0-0
-debugMaxDelay           long 0-0
-debugAddress7           long 0-0
-debugNextHalfTime       long 0-0
-debugAddress9           long 0-0
-debugFastTotal          long 0-0
-debugSlowTotal          long 0-0
-debugScratchTime111     long 0-0
-debugScratchTime        long 0-0
-debugLocationClue       long 0-0
-debugLocationClueF      long 0-0
-debugAccelSteps         long 0-0
-debugDecelSteps         long 0-0
-debugFullSpeedSteps     long 0-0
-debugNextStepTime       long 0-0
-debugAccelStage         long 0-0
-debugStepCountdown      long 0-0 '21
-debug1M                 long 0-0 
-debug2M                 long 0-0 
-debug3M                 long 0-0 
-debug4M                 long 0-0
-debug1MA                long 0-0 
-debug2MA                long 0-0 
-debug3MA                long 0-0 
-debug4MA                long 0-0  
-debug1MF                long 0-0 '30
-debug2MF                long 0-0 
-debug3MF                long 0-0 
-debug4MF                long 0-0  
-debug1MD                long 0-0 
-debug2MD                long 0-0 
-debug3MD                long 0-0 
-debug4MD                long 0-0  
-debugActiveChange       long 0-0 
-debugAddressR           long 0-0 '39
-debugActiveChangeS      long 0-0
-
-'accelMaxIntervals       long 0-0
+accelMaxIntervals       long 0-0
 
 'debugAddress            long 0-0
 dirPinX                 long Header#DIR_X_PIN
@@ -73,7 +29,7 @@ stepMaskX               long 1 << Header#STEP_X_PIN
 stepMaskY               long 1 << Header#STEP_Y_PIN
 stepMaskZ               long 1 << Header#STEP_Z_PIN
   
-'testBuffer              long 0[TEST_BUFFER_SIZE]
+testBuffer              long 0[TEST_BUFFER_SIZE]
 
 OBJ
 
@@ -82,20 +38,20 @@ OBJ
   'Format : "StrFmt"
   'Cnc : "CncCommonMethods"
    
-PUB Start(address165_) '| debugPtr
+PUB Start(address165_) | debugPtr
 
   address165 := address165_
  
-  'testBufferPtr := @testBuffer
+  testBufferPtr := @testBuffer
  
-  'debugPtr := @debugActiveDelayS
+  debugPtr := @debugActiveDelayS
 
   'accelIntervals := ComputeAccelIntervals(maxDelay, minDelay, delayChange, accelInterval)
   
- { repeat result from 0 to 40 'Header#MAX_DEBUG_SPI_INDEX
+  repeat result from 0 to 40 'Header#MAX_DEBUG_SPI_INDEX
     debugActiveDelayS[result] := debugPtr
     debugPtr += 4
-       }
+    
   cognew(@entry, @command)
 
   waitcnt(clkfreq / 100 + cnt)
@@ -130,16 +86,16 @@ PUB SetMotorParameters(localMax, localMin, localChange, localAccelInterval)
 
   mailbox := @result
   result := @maxDelay
-  'accelMaxIntervals := ComputeMaxAccelIntervals(localMax, localMin, localChange)
+  accelMaxIntervals := ComputeMaxAccelIntervals(localMax, localMin, localChange)
   accelIntervals := ComputeAccelIntervals(localMax, localMin, localChange, localAccelInterval)
   SetCommand(Header#NEW_PARAMETERS_MOTOR)
 
-{PRI ComputeMaxAccelIntervals(localMax, localMin, localChange)
+PRI ComputeMaxAccelIntervals(localMax, localMin, localChange)
 
   result := localMax - localMin
   result += localChange - 1     ' make sure divide doesn't truncate value at all
   result /= localChange
-}  
+  
   ''Pst.Str(string(11, 13, "accelMaxIntervals = "))
   ''Pst.Dec(result)
   
@@ -443,24 +399,31 @@ minDelayCog             mov     mailboxAddr, par
 
                         'mov     byteCount, #4    
 delayChangeCog          add     mailboxAddr, #4   ' ** convert to loop
-
-doubleAccel             mov     stepCountdown, #47 ' 48 pointers to initialize
+doubleAccel             mov     stepCountdown, #5
 accelIntervalCog        mov     maxDelayAddr, mailboxAddr
 accelIntervalsCog       add     maxDelayAddr, #4
 accelStepsF             add     accelIntervalCog, destAndSourceIncrement ' increment pointers
 accelStepsS             add     accelIntervalsCog, destinationIncrement
 decelStepsF             djnz    stepCountdown, #accelIntervalCog
-                       
+
+'doubleAccel             mov     minDelayAddr, maxDelayAddr
+'accelStepsF             add     minDelayAddr, #4
+'accelStepsS             mov     delayChangeAddr, minDelayAddr
+'decelStepsF             add     delayChangeAddr, #4
 decelStepsS             nop 'mov     accelIntervalAddr, delayChangeAddr
 fullStepsF              nop 'add     accelIntervalAddr, #4
 fullStepsS              nop 'mov     accelIntervalsAddr, accelIntervalAddr
-fastPhase               nop 'add     accelIntervalsAddr, #4                                      
+fastPhase               nop 'add     accelIntervalsAddr, #4
+
+{doubleAccel             mov     stepCountdown, #47 ' 48 pointers to initialize
+accelIntervalCog        mov     maxDelayAddr, mailboxAddr
+accelIntervalsCog       add     maxDelayAddr, #4
+accelStepsF             add     accelIntervalCog, destAndSourceIncrement ' increment pointers
+accelStepsS             add     accelIntervalsCog, destinationIncrement
+decelStepsF             djnz    stepCountdown, #accelIntervalCog  }
+                                    
 slowPhase               wrlong  con111, debugLocationClueF
-
-                        
-
-                        
-                                               
+                       
 ' Pass through only on start up.                        
 '------------------------------------------------------------------------------
 mainPasmLoop            wrlong  zero, par  ' used to indicate command complete
@@ -1015,14 +978,7 @@ DAT newParameters       rdlong  maxDelayCog, maxDelayAddr
                         rdlong  accelIntervalsCog, accelIntervalsAddr
                         mov     doubleAccel, accelIntervalsCog
                         add     doubleAccel, accelIntervalsCog
-                        jmp     #mainPasmLoop
-
- {mov     stepCountdown, #24
-                        mov     t1, txbuff_ptr_cog
-copyToCog1              rdlong  rxmask_cog, t1
-                        add     copyToCog1, destinationIncrement
-                        add     t1, #4
-                        djnz    stepCountdown, #copyToCog1}                         
+                        jmp     #mainPasmLoop        
 '------------------------------------------------------------------------------
 
                               
@@ -1144,56 +1100,49 @@ con4M                   long 4_000_000
 
 stepMask                long 1 << Header#STEP_X_PIN | 1 << Header#STEP_Y_PIN | 1 << Header#STEP_Z_PIN
     
-'testBufferPtr           long 0-0
-mailboxAddr             res 1 '1
-maxDelayAddr            res 1   
-minDelayAddr            res 1   
-delayChangeAddr         res 1   
-accelIntervalAddr       res 1   
-accelIntervalsAddr      res 1  '6
-
-address165Ptr           res 1
-debugActiveDelaySPtr    res 1
-debugActiveDelayPtr     res 1
-debugDelayTotalSPtr     res 1 '10
-debugDelayTotalPtr      res 1   
-debugFullStepsFPtr      res 1
-debugAddress5Ptr        res 1
-debugMaxDelayPtr        res 1
-debugAddress7Ptr        res 1
-debugNextHalfTimePtr    res 1
-debugAddress9Ptr        res 1
-debugFastTotalPtr       res 1
-debugSlowTotalPtr       res 1
-debugScratchTime111Ptr  res 1 '20
-debugScratchTimePtr     res 1
-debugLocationCluePtr    res 1
-debugLocationClueFPtr   res 1
-debugAccelStepsPtr      res 1
-debugDecelStepsPtr      res 1
-debugFullSpeedStepsPtr  res 1
-debugNextStepTimePtr    res 1
-debugAccelStagePtr      res 1
-debugStepCountdownPtr   res 1 
-debug1MPtr              res 1 '30
-debug2MPtr              res 1 
-debug3MPtr              res 1 
-debug4MPtr              res 1
-debug1MAPtr             res 1 
-debug2MAPtr             res 1 
-debug3MAPtr             res 1 
-debug4MAPtr             res 1  
-debug1MFPtr             res 1 
-debug2MFPtr             res 1 
-debug3MFPtr             res 1 '40
-debug4MFPtr             res 1  
-debug1MDPtr             res 1 
-debug2MDPtr             res 1 
-debug3MDPtr             res 1 
-debug4MDPtr             res 1  
-debugActiveChangePtr    res 1 
-debugAddressRPtr        res 1 
-debugActiveChangeSPtr   res 1 '48
+testBufferPtr           long 0-0
+address165              long 0-0
+debugActiveDelayS       long 0-0
+debugActiveDelay        long 0-0
+debugDelayTotalS        long 0-0
+debugDelayTotal         long 0-0   
+debugFullStepsF         long 0-0
+debugAddress5           long 0-0
+debugMaxDelay           long 0-0
+debugAddress7           long 0-0
+debugNextHalfTime       long 0-0
+debugAddress9           long 0-0
+debugFastTotal          long 0-0
+debugSlowTotal          long 0-0
+debugScratchTime111     long 0-0
+debugScratchTime        long 0-0
+debugLocationClue       long 0-0
+debugLocationClueF      long 0-0
+debugAccelSteps         long 0-0
+debugDecelSteps         long 0-0
+debugFullSpeedSteps     long 0-0
+debugNextStepTime       long 0-0
+debugAccelStage         long 0-0
+debugStepCountdown      long 0-0 '21
+debug1M                 long 0-0 
+debug2M                 long 0-0 
+debug3M                 long 0-0 
+debug4M                 long 0-0
+debug1MA                long 0-0 
+debug2MA                long 0-0 
+debug3MA                long 0-0 
+debug4MA                long 0-0  
+debug1MF                long 0-0 '30
+debug2MF                long 0-0 
+debug3MF                long 0-0 
+debug4MF                long 0-0  
+debug1MD                long 0-0 
+debug2MD                long 0-0 
+debug3MD                long 0-0 
+debug4MD                long 0-0  
+debugActiveChange       long 0-0 
+debugAddressR           long 0-0 '39
+debugActiveChangeS      long 0-0
 
 stepDelay               res 1
 'wait                    res 1
@@ -1215,7 +1164,12 @@ tmp1                    res 1
 tmp2                    res 1}
 fastMask                res 1
 slowMask                res 1
-   
+mailboxAddr             res 1
+maxDelayAddr            res 1   
+minDelayAddr            res 1   
+delayChangeAddr         res 1   
+accelIntervalAddr       res 1   
+accelIntervalsAddr      res 1   
 
 
 halfMaxDelayCog         res 1

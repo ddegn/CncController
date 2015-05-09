@@ -88,7 +88,7 @@ OBJ
   Format : "StrFmt"
   'Sd[1]: "SdSmall" 
   Cnc : "CncCommonMethods"
-  Motor : "MotorControl"
+  Motor : "MotorControlX1"
    
 PUB Setup
 
