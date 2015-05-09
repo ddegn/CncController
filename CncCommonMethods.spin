@@ -1966,6 +1966,12 @@ PUB WriteData(instance, pointer, size)
 
   result := Sd[instance].WriteData(pointer, size)
 
+PUB CloseFile(instance)
+
+  LSd
+  Sd[instance].CloseFile
+  CSd
+
 PUB BootPartition(instance, pointer)
 
   if instance <> Header#OLED_DATA_SD

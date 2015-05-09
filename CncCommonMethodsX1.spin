@@ -1,4 +1,4 @@
-DAT programName         byte "CncCommonMethods", 0
+DAT programName         byte "CncCommonMethodsX1", 0
 CON
 {{      
 
@@ -72,7 +72,7 @@ VAR
 
 
   'long lastRefreshTime, refreshInterval
-  long oledStack[Header#MONITOR_OLED_STACK_SIZE]
+  'long oledStack[Header#MONITOR_OLED_STACK_SIZE]
   long sdErrorNumber, sdErrorString, sdTryCount
   long filePosition[Header#NUMBER_OF_AXES]
   long globalMultiplier, globalDecPoints
@@ -99,6 +99,7 @@ invertFlag              long 0
 invertPoints            long 0[4]
 configNamePtr           long 0
 fontFileName            long 0-0
+oledScratchPtr          long 0-0
 
 machineState            byte Header#INIT_STATE
 units                   byte Header#MILLIMETER_UNIT 
@@ -146,31 +147,37 @@ PUB Start
 
   sdFlag := Header#INITIALIZING_SD
   
-  Sd.fatEngineStart(Header#DOPIN, Header#ClkPIN, Header#DIPIN, Header#CSPIN, {
+  result := Sd.fatEngineStart(Header#DOPIN, Header#ClkPIN, Header#DIPIN, Header#CSPIN, {
   } Header#WP_SD_PIN, Header#CD_SD_PIN, Header#RTC_PIN_1, Header#RTC_PIN_2, {
   } Header#RTC_PIN_3)
   
   SetLocks
   SetFont(activeFont)
   
-  Com.Str(0, string(11, 13, "SD Card Driver Started"))
+  '150509a Com.Str(0, string(11, 13, "SD Card Driver Started"))
 
   
   MountSd(Header#OLED_DATA_SD)
 
-  longfill(@oledStack, Header#STACK_CHECK_LONG, Header#MONITOR_OLED_STACK_SIZE)
+  'longfill(@oledStack, Header#STACK_CHECK_LONG, Header#MONITOR_OLED_STACK_SIZE)
   
-  result := cognew(OledMonitor, @oledStack)
-  Com.Str(0, string(11, 13, "OledMonitor started on cog # "))
+  'result := cognew(OledMonitor, @oledStack)
+  {Com.Str(0, string(11, 13, "OledMonitor started on cog # "))
   Com.Dec(0, result)   
-  Com.Tx(0, ".")
+  Com.Tx(0, ".") }
   'PressToContinue
-  result := @oledStack
+  'result := @oledStack
   
 PRI SetLocks
 
   debugLock := locknew
   sdLock := locknew
+  
+PUB LauchOledMonitor(oledStackPtr, oledScratchPtr_)
+
+  oledScratchPtr := oledScratchPtr_
+
+  result := cognew(OledMonitor, oledStackPtr)
   
 PUB L
 
@@ -1835,7 +1842,7 @@ PUB OpenFileToRead(sdInstance, basePtr, fileToOpen)
   LSd  
   result := MountSd(sdInstance)
   if result == 1
-    Com.Str(0, string(11, 13, "Error in program.  Problem mounting SD card."))
+    '150509a Com.Str(0, string(11, 13, "Error in program.  Problem mounting SD card."))
     waitcnt(clkfreq * 2 + cnt)
     result := Header#READ_FILE_ERROR_OTHER
     CSd
@@ -1857,6 +1864,7 @@ PUB OpenFileToRead(sdInstance, basePtr, fileToOpen)
     ''Com.Str(0, string(34, " found."))
     result := Header#READ_FILE_SUCCESS
   else
+    {'150509a 
     Com.Str(0, string(11, 13, "File ", 34))
     Com.Str(0, basePtr)
     Com.Str(0, string(34, " not found."))
@@ -1864,7 +1872,7 @@ PUB OpenFileToRead(sdInstance, basePtr, fileToOpen)
     Com.Dec(0, sdErrorString)
     Com.Str(0, string(11, 13, "sdErrorString ", 34))
     Com.Str(0, sdErrorString)
-    Com.Tx(0, 34)
+    Com.Tx(0, 34) }'150509a 
     UnmountSd(sdInstance)
    
     result := Header#FILE_NOT_FOUND
@@ -1932,14 +1940,14 @@ PUB OpenConfig(configPtr_)
 
   configPtr := configPtr_
 
-  Com.Str(0, string(11, 13, "OpenConfig Method"))
+  '150509a Com.Str(0, string(11, 13, "OpenConfig Method"))
   'PressToContinue
   'configNamePtr := Header.GetConfigName
   configNamePtr := Header.GetFileName(Header#CONFIG_FILE)
   
   result := OpenFileToRead(0, configNamePtr, -1)
 
-  Com.Str(0, string(11, 13, "After OpenFileToRead Call"))
+  '150509a Com.Str(0, string(11, 13, "After OpenFileToRead Call"))
   'PressToContinue
   
 {  if result == Header#READ_FILE_SUCCESS
@@ -2045,12 +2053,12 @@ PUB MountSd(sdInstance)
   if sdErrorNumber
     sdFlag := Header#NOT_FOUND_SD
     result := 1
-    Com.Str(0, string(11, 13, "Error Mounting SD Card #"))
-    Com.Dec(0, sdErrorNumber)
+    '150509a Com.Str(0, string(11, 13, "Error Mounting SD Card #"))
+    '150509a Com.Dec(0, sdErrorNumber)
     
     if sdErrorNumber == -1
-      Com.Str(0, string(11, 13, "The SD card was not properly unmounted after its last use."))
-      Com.Str(0, string(11, 13, "Continuing with program."))
+      '150509a Com.Str(0, string(11, 13, "The SD card was not properly unmounted after its last use."))
+      '150509a Com.Str(0, string(11, 13, "Continuing with program."))
       sdFlag := Header#INITIALIZING_SD
       result := 0
 
@@ -2061,13 +2069,13 @@ PUB UnmountSd(sdInstance)
 '' sdLock should be set (if used) prior to calling this method.
 
   if sdMountFlag[sdInstance] == 0
-    Com.Str(0, string(11, 13, "Partition not currently mounted."))
+    '150509a Com.Str(0, string(11, 13, "Partition not currently mounted."))
     return
   
-  Com.Str(0, string(11, 13, "Unmounting Partition"))
+  '150509a Com.Str(0, string(11, 13, "Unmounting Partition"))
   sdErrorNumber := Sd[sdInstance].unmountPartition
-  Com.Str(0, string(11, 13, "sdErrorNumber = "))
-  Com.Dec(0, sdErrorNumber)
+  '150509a Com.Str(0, string(11, 13, "sdErrorNumber = "))
+  '150509a Com.Dec(0, sdErrorNumber)
   'outa[_GreenLedPin]~~
   'outa[_RedLedPin]~
   sdMountFlag[sdInstance] := 0

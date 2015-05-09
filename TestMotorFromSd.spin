@@ -1,11 +1,11 @@
-DAT programName         byte "EXECUTEX", 0
+DAT programName         byte "TestMotorFromSd", 0
 CON
 {  Design Execute
   This sub program reads the design file from the SD card and executes the instructions.
 
   ******* Private Notes *******
  
-  Change name from "DESIGNIN" to "EXECUTE_."
+  Change name from "EXECUTE_" to "TestMotor."
  
 }  
 CON
@@ -41,12 +41,12 @@ VAR
   'long topX, topY, topZ
   long oledPtr[Header#MAX_OLED_DATA_LINES]
   long adcPtr, buttonMask
-  'long configPtr', filePosition[4]
+  long configPtr', filePosition[4]
   long globalMultiplier, fileNamePtr
   long fileIdNumber[Header#MAX_DATA_FILES]
   long dataFileCounter, highlightedFile
   
-  'byte debugLock, spiLock
+  byte debugLock, spiLock
   'byte tstr[32]
 
   'byte sdMountFlag[Header#NUMBER_OF_SD_INSTANCES]
@@ -79,70 +79,46 @@ homedFlag               byte Header#UNKNOWN_POSITION, 0[3]
 positionX               long 0 '$80_00_00_00
 positionY               long 0 '$80_00_00_00
 positionZ               long 0 '$80_00_00_00
-oledStackPtr            long 0 ' used to test how much stack space is actually used
+oledStackPtr            long 0
 pasmBuffer              long 0[Header#MAX_PASM_IMAGE]
  
 OBJ
 
   Header : "HeaderCnc"
-  'Pst : "Parallax Serial TerminalDat"
-  Com : "Serial4PortSd"
+  Pst : "Parallax Serial TerminalDat"
   Format : "StrFmt"
   'Sd[1]: "SdSmall" 
-  Cnc : "CncCommonMethodsX1"
+  Cnc : "CncCommonMethods"
   Motor : "MotorControlSd"
    
-PUB Setup'(parameter0, parameter1) 
+PUB Setup
 
-  'configPtr := Header.GetConfigName
+  configPtr := Header.GetFileName(Header#CONFIG_FILE) 
+
   'fileNamePtr := Header.GetFileName
-  'configNamePtr := Header.GetFileName(Header#CONFIG_FILE)
-  fileNamePtr := Header.GetFileName(Header#CNC_DATA_FILE)
-  
-  'Pst.Start(115_200)
+  fileNamePtr := Header.GetFileName(Header#CNC_DATA_FILE) 
+  Pst.Start(115_200)
+ 
   'cognew(OledDemo, @stack)
   'debugLock := locknew
   'spiLock := locknew
   'Cnc.SetDebugLock(debugLock)
-
-  oledStackPtr := Cnc.Start
-
-  Cnc.OpenFileToRead(0, Header.GetFileName(Header#MOTOR_FILE), -1)
-  Cnc.ReadData(0, @pasmBuffer, Header#MOTOR_PASM_IMAGE * 4)
-  Cnc.CloseFile(0)
-  Motor.Start(Cnc.Get165Address, @pasmBuffer)
-  
-  Cnc.OpenFileToRead(0, Header.GetFileName(Header#SERIAL_FILE), -1)
-  Cnc.ReadData(0, @pasmBuffer, Header#SERIAL_PASM_IMAGE * 4)
-  Cnc.CloseFile(0)
-  Com.Init(@pasmBuffer, @pasmBuffer)
-  Com.AddPort(0, 31, 30, -1, -1, Com#DEFAULTTHRESHOLD, 0, 115_200, Header#RX_BUFFER, Header#TX_BUFFER)
-  Com.Start        
-
-  
+ 
   repeat
-    result := Com.RxHowFull(0) 'Pst.RxCount
-    Com.Str(0, string(11, 13, "Press any key to continue starting program."))
+    result := Pst.RxCount
+    Pst.str(string(11, 13, "Press any key to continue starting program."))
     waitcnt(clkfreq / 2 + cnt)
   until result
-  
-  Com.RxFlush(0)
+  Pst.RxFlush
 
-  longfill(@pasmBuffer + Header#TOTAL_SERIAL_BUFFERS, Header#STACK_CHECK_LONG, {
-  } Header#MONITOR_OLED_STACK_SIZE)
-  
-  Cnc.LauchOledMonitor(@pasmBuffer + Header#TOTAL_SERIAL_BUFFERS, {
-  } @pasmBuffer + Header#TOTAL_SERIAL_BUFFERS + (4 * Header#MONITOR_OLED_STACK_SIZE))
-
-  
   'TestMath
   
-  'cncCog := Cnc.Start'(spiLock)
-  
+  oledStackPtr := Cnc.Start'(spiLock)
+
   adcPtr := Cnc.GetAdcPtr
   buttonMask := 1 << Header#JOYSTICK_BUTTON_165
   
-  Com.Str(0, string(11, 13, "Helper object started."))
+  Pst.str(string(11, 13, "Helper object started."))
  
   waitcnt(clkfreq * 2 + cnt)
 
@@ -157,272 +133,87 @@ PUB Setup'(parameter0, parameter1)
 
   'repeat
   
-  OpenConfig
-  repeat result from 0 to 2
-    Cnc.ResetDrv8711(result)
-    Com.Str(0, string(11, 13, "Reset axis #"))
-    Com.Dec(0, result)   
-    Com.Tx(0, ".")
-
-    Com.Str(0, string(11, 13, "Reading registers prior to setup."))
-    Cnc.ShowRegisters(result)
-    
-    Cnc.SetupDvr8711(result, Header#DEFAULT_DRIVE_DRV8711, Header#DEFAULT_MICROSTEP_CODE_DRV8711, {
-    } Header#DEFAULT_DECAY_MODE_DRV8711, Header#DEFAULT_GATE_SPEED_DRV8711, {
-    } Header#DEFAULT_GATE_DRIVE_DRV8711, Header#DEFAULT_DEADTIME_DRV8711)
-    Com.Str(0, string(11, 13, "Setup finished axis #"))
-    Com.Dec(0, result)   
-    Com.Tx(0, ".")
-    'Cnc.PressToContinue
-    Com.Str(0, string(11, 13, "Reading registers."))
-    Cnc.ShowRegisters(result)
-
-   
-  'Cnc.ReadData(0, @pasmBuffer, 454 * 4)
-  
-  'Motor.Start(Cnc.Get165Address)
-  
+  'OpenConfig
   'repeat
   result := 0
- { repeat result from 0 to 2
+  repeat result from 0 to 2
     Cnc.ResetDrv8711(result)
-    Com.Str(0, string(11, 13, "Reset axis #"))
-    Com.Dec(0, result)   
-    Com.Tx(0, ".")
+    Pst.str(string(11, 13, "Reset axis #"))
+    Pst.Dec(result)   
+    Pst.Char(".")
 
-    Com.Str(0, string(11, 13, "Reading registers prior to setup."))
+    Pst.str(string(11, 13, "Reading registers prior to setup."))
     Cnc.ShowRegisters(result)
     
     Cnc.SetupDvr8711(result, Header#DEFAULT_DRIVE_DRV8711, Header#DEFAULT_MICROSTEP_CODE_DRV8711, {
     } Header#DEFAULT_DECAY_MODE_DRV8711, Header#DEFAULT_GATE_SPEED_DRV8711, {
     } Header#DEFAULT_GATE_DRIVE_DRV8711, Header#DEFAULT_DEADTIME_DRV8711)
-    Com.Str(0, string(11, 13, "Setup finished axis #"))
-    Com.Dec(0, result)   
-    Com.Tx(0, ".")
+    Pst.str(string(11, 13, "Setup finished axis #"))
+    Pst.Dec(result)   
+    Pst.Char(".")
     Cnc.PressToContinue
-    Com.Str(0, string(11, 13, "Reading registers."))
+    Pst.str(string(11, 13, "Reading registers."))
     Cnc.ShowRegisters(result)
-    Cnc.PressToContinue    }
+    Cnc.PressToContinue    
 
-  'repeat  
+  Cnc.PressToContinue
+  'Motor.Start(Cnc.Get165Address)
+  Cnc.OpenFileToRead(0, Header.GetFileName(Header#MOTOR_FILE), -1)
+  Cnc.ReadData(0, @pasmBuffer, Header#MOTOR_PASM_IMAGE * 4)
+  Cnc.CloseFile(0)
+  Motor.Start(Cnc.Get165Address, @pasmBuffer) 
   MainLoop
-{
-PUB AdcJoystickLoop | localIndex, buttonValue, previousButton, {
-} invertPos[2], invertSize, center[3], deadBand, posSlope[2], sizeSlope, previousJoy[3], {
-} temp, maxPos[2]
-  L
-  Com.Str(0, string(11, 13, "AdcJoystickLoop Method"))
-  C
- 
-  previousButton := -1
 
-  oledPtr[3] := 0 '$80_00_00_00
-  oledPtr[4] := Cnc.GetAdcPtr
 
-  oledPtr[5] := oledPtr[4] + 4
-  oledPtr[6] := oledPtr[4] + 8
-  oledPtr[0] := oledPtr[4] + 12
-  oledPtr[1] := oledPtr[4] + 16
-  oledPtr[2] := oledPtr[4] + 20
-  oledPtr[7] := @timer
+PUB MainLoop | axisIndex, distance[2]
 
-  timer := 9999
-  Cnc.SetOled(Header#AXES_READOUT_OLED, @joystickLabels, @oledPtr, 8)
-
-  Cnc.SetAdcChannels(0, 6)
-
-  maxPos[0] := Header#MAX_OLED_X
-  maxPos[1] := Header#MAX_OLED_Y
-  deadBand := 4095 / 20
-  {center[0] := long[oledPtr[0]]
-  center[1] := long[oledPtr[1]]
-  center[2] := long[oledPtr[2]]}
-  longfill(@center, 4095 / 2, 3)
-  'invertSize := 8
-  invertSize := Header#MIN_OLED_INVERTED_SIZE_Y
-  invertPos[0] := (128 - invertSize) / 2
-  invertPos[2] := (96 - invertSize) / 2
-  posSlope[0] := (center - deadBand) / 10
-  posSlope[1] := (center - deadBand) / -10
-  sizeSlope := posSlope / 2
-  longfill(@previousJoy, 4095 / 2, 3)
+  axisIndex := 0
+  longfill(@distance, 0, 2)
   
-  L
-  Pst.Clear
-  'Pst.RxFlush
-  C
   repeat
-    Cnc.ReadAdc
-
-    L
-    Com.Tx(0, 11)
-    Com.Tx(0, 13)
-    Pst.PositionY(0)
-    Com.Dec(0, cogid)
-    Com.Tx(0, ":")
-    Com.Tx(0, 32)
-    temp := long[oledPtr[2]] - center[2]
-    if temp < -deadBand
-      temp += deadBand
-      temp -= sizeSlope - 1
-    elseif temp > deadBand
-      temp -= deadBand
-      temp += sizeSlope - 1
-    else
-      temp := 0
-    Com.Str(0, string("temp was = "))
-    Com.Dec(0, temp)
-    Com.Str(0, string(", sloped temp ="))
-   
-    temp /= sizeSlope
-    
-    Com.Dec(0, temp)
-    Com.Str(0, string(", invertSize was ="))
-    Com.Dec(0, invertSize)  
-    invertSize := Header#MIN_OLED_INVERTED_SIZE_Y #> invertSize + temp <# 96
-    Com.Str(0, string(", invertSize is ="))
-    Com.Dec(0, invertSize)
-    
-    repeat localIndex from 0 to 1 
-      temp := long[oledPtr[localIndex]] - center[localIndex]
-      Com.Str(0, string(11, 13, "temp["))
-      Com.Dec(0, localIndex)
-      Com.Str(0, string("] was = "))
-      Com.Dec(0, temp)
-      Com.Str(0, string(", adjusted for deadband = "))
-      if temp < -deadBand
-        temp += deadBand
-        temp -= posSlope - 1
-      elseif temp > deadBand
-        temp -= deadBand
-        temp += posSlope - 1
-      else
-        temp := 0
-      Com.Dec(0, temp)    
-      temp /= posSlope[localIndex]
-      Com.Str(0, string(", sloped temp ="))
-      Com.Dec(0, temp)    
-      Com.Str(0, string(11, 13, "invertPos["))
-      Com.Dec(0, localIndex)
-      Com.Str(0, string("] was = "))
-      Com.Dec(0, invertPos[localIndex])
-      Com.Str(0, string(", is = "))
-      invertPos[localIndex] := 0 #> invertPos[localIndex] + temp <# {
-      } (maxPos[localIndex] - (invertSize / 2))
-      Com.Dec(0, invertPos[localIndex])
+    Cnc.PressToContinue
+    distance[0] += 1600
+    distance[1] += 800
+    Pst.str(string(11, 13, "Driving "))
+    Pst.str(Header.FindString(Cnc.GetAxisText, 0))
+    Pst.str(string(" motor "))
+    Pst.Dec(distance[0])
+    Pst.str(string(" steps and "))
+    Pst.str(Header.FindString(Cnc.GetAxisText, 1))
+    Pst.str(string(" motor "))
+    Pst.Dec(distance[1])
+    Pst.str(string(" steps."))
+    'Motor.MoveSingle(axisIndex, result)
+    Motor.MoveLine(0, 1, distance[0], distance[1])
+    'axisIndex++
+    if axisIndex > 2
+      axisIndex := 0
       
-      
-    temp := Cnc.SetInvert(invertPos[0], invertPos[1], invertPos[0] + invertSize, invertPos[1] + invertSize)
-    
-    Com.Str(0, string(11, 13, "SetInvert("))
-    Com.Dec(0, invertPos[0])
-    Com.Str(0, string(", "))
-    Com.Dec(0, invertPos[1])
-    Com.Str(0, string(", "))
-    Com.Dec(0, invertPos[0] + invertSize)
-    Com.Str(0, string(", "))
-    Com.Dec(0, invertPos[1] + invertSize)
-    Com.Tx(0, ")")
-    buttonValue := Cnc.Get165Value & buttonMask 
-    Com.Tx(0, 11)
-    Com.Tx(0, 13)
-    Cnc.ReadableBin(buttonValue, 32)
-    if buttonValue <> previousButton
-      previousButton := buttonValue
-      if buttonValue
-        buttonLabel[8] := "f"
-        buttonLabel[9] := "f"
-      else
-        buttonLabel[8] := "n"
-        buttonLabel[9] := " "
-    Com.Tx(0, 11)
-    Com.Tx(0, 13)
-    'C
-    timer--
-    'DHome
-    'Com.Tx(0, 1)
-    repeat localIndex from 0 to 7
-      Com.Str(0, Header.FindString(@adcLabels, localIndex))
-      if oledPtr[localIndex] '<> $80_00_00_00
-        Com.Dec(0, long[oledPtr[localIndex]])
-      {Com.Tx(0, ",")
-      Com.Tx(0, " ")
-      Com.Dec(0, long[oledPtr[localIndex] + 32])  }
-      Com.Tx(0, 11)
-      Com.Tx(0, 13)  
-    C
-    waitcnt(clkfreq / 10 + cnt)
-    'result := Pst.RxCount
-    
-  'until result
-    result := Cnc.Get165Value & buttonMask    
-    
-  while result
-
-  L
-  Com.Str(0, string(11, 13, "End of AdcJoystickLoop Method"))
-  C
-  
-  Cnc.InvertOff
-  waitcnt(clkfreq / 10 + cnt)
-  
-  Cnc.SetOled(Header#DEMO_OLED, @xyzLabels, @oledPtr, 4) 
-  waitcnt(clkfreq * 2 + cnt)
-    }
-PUB MainLoop
-
-  repeat
-    'if homedFlag <> Header#HOMED_POSITION
-      'Com.Str(0, string(11, 13, "Unexpected executeState =")) 
-    case executeState
-      INIT_EXECUTE:
-        \MainMenu
-      SELECT_TO_EXECUTE:
-        \ScanFiles
-        Com.Str(0, string(11, 13, "Back in MainLoop before SelectToExecute call"))
-        Cnc.PressToContinue
-        \SelectToExecute(@fileIdNumber, dataFileCounter)
-        Com.Str(0, string(11, 13, "Back in MainLoop after SelectToExecute call"))
-        Cnc.PressToContinue
-      ACTIVE_EXECUTE:
-        \ActiveExecute
-      RETURN_FROM_EXECUTE:
-        ReturnToTop
-  
-      other:
-        Com.Str(0, string(11, 13, "Unexpected executeState ="))               
-        Com.Dec(0, executeState)
-        Cnc.PressToContinueOrClose(-1)
-        Com.Str(0, string(11, 13, "End of program."))               
-        repeat
-     
-PUB ReturnToTop
+{PUB ReturnToTop
 
   programState := Header#TRANSITIONING_PROGRAM
   previousProgram := Header#DESIGN_READ_MAIN
-  'Cnc.OpenOutputFileW(0, configPtr, -1)
-  Cnc.OpenOutputFileW(0, Header.GetFileName(Header#CONFIG_FILE), -1)
-
+  Cnc.OpenOutputFileW(0, configPtr, -1)
   Cnc.WriteData(0, @programState, Header#CONFIG_SIZE)
   'MountSd(0)
   {Cnc.BootPartition(0, fileNamePtr)
 
   Cnc.PressToContinueOrClose(-1)
-  Com.Str(0, string(11, 13, 7, "Something is wrong.")) }              
-  Com.Str(0, string(11, 13, 7, "Preparing to reboot."))               
+  Pst.str(string(11, 13, 7, "Something is wrong.")) }              
+  Pst.str(string(11, 13, 7, "Preparing to reboot."))               
   waitcnt(clkfreq * 3 + cnt)
   reboot
   
 {PUB InitState
 
   repeat
-    Com.Tx(0, 1)
-    Com.Str(0, string(11, 13, "Machine needs to be homed."))
-    Com.Str(0, string(11, 13, "Do homing stuff here."))
-    Com.Str(0, string(11, 13, "Wait until limit switches are installed."))
-    Com.Str(0, string(11, 13, "Changing to ", QUOTE, "HOMED_STATE", QUOTE, "."))
-    Com.Tx(0, 11)
-    Com.Tx(0, 13)
+    Pst.Home
+    Pst.str(string(11, 13, "Machine needs to be homed."))
+    Pst.str(string(11, 13, "Do homing stuff here."))
+    Pst.str(string(11, 13, "Wait until limit switches are installed."))
+    Pst.str(string(11, 13, "Changing to ", QUOTE, "HOMED_STATE", QUOTE, "."))
+    Pst.ClearEnd
+    Pst.Newline
     Pst.ClearBelow
     waitcnt(clkfreq * 2 + cnt)
     machineState := Header#HOMED_STATE
@@ -434,22 +225,21 @@ PUB MainMenu
   Cnc.SetOled(Header#AXES_READOUT_OLED, @oledMenu, @oledPtr, oledMenuLimit)
   highlightedLine := oledMenuHighlightRange[0]
   Cnc.SetAdcChannels(Header#JOY_Y_ADC, Header#JOY_Z_ADC)
-  Com.Tx(0, 11)
-  Com.Tx(0, 13)
-  Com.Tx(0, 12)
-  'Pst.ClearBelow
+  Pst.ClearEnd
+  Pst.Newline
+  Pst.ClearBelow
     
   repeat
-    Com.Tx(0, 1)
+    Pst.Home
 
-    Com.Str(0, string(11, 13, "Machine waiting for input."))
-    Com.Str(0, string(11, 13, "Press ", QUOTE, "s", QUOTE, " to Select design file to execute."))
+    Pst.str(string(11, 13, "Machine waiting for input."))
+    Pst.str(string(11, 13, "Press ", QUOTE, "s", QUOTE, " to Select design file to execute."))
     
-    Com.Str(0, string(11, 13, "Press ", QUOTE, "r", QUOTE, " to Return to top menu.")) 
-    Com.Tx(0, 11)
-    Com.Tx(0, 13)
+    Pst.str(string(11, 13, "Press ", QUOTE, "r", QUOTE, " to Return to top menu.")) 
+    Pst.ClearEnd
+    Pst.Newline
     'Pst.ClearBelow
-    result := Com.RxHowFull(0) 'Pst.RxCount
+    result := Pst.RxCount
   
     CheckMenu(result)  
   while machineState == Header#INIT_STATE
@@ -459,15 +249,15 @@ PUB CheckMenu(tempValue)
   result := 1
   
   if tempValue
-    tempValue := Com.Rx(0) 'Pst.CharIn
+    tempValue := Pst.CharIn
     result := 0
   else
     tempValue := highlightedLine
     result := Cnc.Get165Value & buttonMask
-    Com.Str(0, string(11, 13, "highlightedLine ="))               
-    Com.Dec(0, highlightedLine)
-    Com.Tx(0, 11)
-    Com.Tx(0, 13)
+    Pst.str(string(11, 13, "highlightedLine ="))               
+    Pst.Dec(highlightedLine)
+    Pst.ClearEnd
+    Pst.Newline
     Cnc.ReadableBin(result, 32)
     
   ifnot result
@@ -487,57 +277,57 @@ PUB CheckMenu(tempValue)
 
   Cnc.ReadAdc
   result := GetJoystick(Header#JOY_Y_ADC, -Header#DEFAULT_DEADBAND * 4)
-  Com.Str(0, string(11, 13, "result Y ="))               
-  Com.Dec(0, result)
+  Pst.str(string(11, 13, "result Y ="))               
+  Pst.Dec(result)
   result += GetJoystick(Header#JOY_Z_ADC, Header#DEFAULT_DEADBAND * 4)
-  Com.Str(0, string(11, 13, "result Y + Z ="))               
-  Com.Dec(0, result)
+  Pst.str(string(11, 13, "result Y + Z ="))               
+  Pst.Dec(result)
   if result > 0 and highlightedLine < oledMenuHighlightRange[1]
     highlightedLine++
   elseif result < 0 and highlightedLine > oledMenuHighlightRange[0]
     highlightedLine--
-  Com.Str(0, string(11, 13, "highlightedLine ="))               
-  Com.Dec(0, highlightedLine)
+  Pst.str(string(11, 13, "highlightedLine ="))               
+  Pst.Dec(highlightedLine)
   Cnc.SetInvert(0, highlightedLine * 8, Header#MAX_OLED_X, (highlightedLine * 8) + 7)
 
 PUB GetJoystick(localAxis, scaler)
 
   result := long[adcPtr][localAxis] - Header#DEFAULT_CENTER
-  {Com.Str(0, string(11, 13, "temp["))
-  Com.Dec(0, localIndex)
-  Com.Str(0, string("] was = "))
-  Com.Dec(0, temp)
-  Com.Str(0, string(", adjusted for deadband = "))  }
+  {Pst.Str(string(11, 13, "temp["))
+  Pst.Dec(localIndex)
+  Pst.Str(string("] was = "))
+  Pst.Dec(temp)
+  Pst.Str(string(", adjusted for deadband = "))  }
 
-  Com.Str(0, string(11, 13, "GJ("))
-  Com.Dec(0, localAxis)
-  Com.Str(0, string(", "))
-  Com.Dec(0, scaler)
-  Com.Str(0, string(") "))  
+  Pst.Str(string(11, 13, "GJ("))
+  Pst.Dec(localAxis)
+  Pst.Str(string(", "))
+  Pst.Dec(scaler)
+  Pst.Str(string(") "))  
   if result < -Header#DEFAULT_DEADBAND
-    Com.Str(0, string("negative joystick = "))
+    Pst.Str(string("negative joystick = "))
     result += Header#DEFAULT_DEADBAND
-    Com.Dec(0, result)
+    Pst.Dec(result)
     'temp -= posSlope - 1
   elseif result > Header#DEFAULT_DEADBAND
-    Com.Str(0, string("positive joystick = "))
+    Pst.Str(string("positive joystick = "))
     result -= Header#DEFAULT_DEADBAND
-    Com.Dec(0, result)
+    Pst.Dec(result)
     'temp += posSlope - 1
   else
     result := 0
-  'Com.Dec(0, temp)    
+  'Pst.Dec(temp)    
   result /= scaler
-  {Com.Str(0, string(", sloped temp ="))
-  Com.Dec(0, temp)    
-  Com.Str(0, string(11, 13, "invertPos["))
-  Com.Dec(0, localIndex)
-  Com.Str(0, string("] was = "))
-  Com.Dec(0, invertPos[localIndex])
-  Com.Str(0, string(", is = "))  
+  {Pst.Str(string(", sloped temp ="))
+  Pst.Dec(temp)    
+  Pst.Str(string(11, 13, "invertPos["))
+  Pst.Dec(localIndex)
+  Pst.Str(string("] was = "))
+  Pst.Dec(invertPos[localIndex])
+  Pst.Str(string(", is = "))  
   invertPos[localIndex] := 0 #> invertPos[localIndex] + temp <# {
   } (maxPos[localIndex] - (invertSize / 2))
-  Com.Dec(0, invertPos[localIndex])}
+  Pst.Dec(invertPos[localIndex])}
       
 {PUB MenuInput | localState
 
@@ -575,19 +365,19 @@ PUB ScanFiles | size, characterIndex
 
   dataFileCounter := 0
 
-  Com.Str(0, string(11, 13, "SelectToExecute Method"))
+  Pst.Str(string(11, 13, "SelectToExecute Method"))
   repeat
     characterIndex := 0
     result := Cnc.ListEntries(0, "N")
     ifnot result
       'executeState := INIT_EXECUTE
       return
-    Com.Str(0, string(11, 13, "result = "))
-    Com.Dec(0, result)
+    Pst.Str(string(11, 13, "result = "))
+    Pst.Dec(result)
     size := strsize(result) <# MAX_LIST_SIZE
-    Com.Str(0, string(11, 13, "size = "))
-    Com.Dec(0, size)
-    Com.Str(0, string(11, 13, "string = "))
+    Pst.Str(string(11, 13, "size = "))
+    Pst.Dec(size)
+    Pst.Str(string(11, 13, "string = "))
     repeat size
       Cnc.SafeTx(byte[result][characterIndex++])
     'Cnc.PressToContinue
@@ -619,11 +409,11 @@ PUB CheckForMatch(localTargetPtr, localNewPtr, preSize, idSize, postSize, idPoin
     
   long[idPointer] := fileId
 
-  Com.Str(0, string(11, 13, "Match Found"))
-  Com.Str(0, string(11, 13, "long["))
-  Com.Dec(0, idPointer)
-  Com.Str(0, string("] = "))
-  Com.Dec(0, fileId)
+  Pst.Str(string(11, 13, "Match Found"))
+  Pst.Str(string(11, 13, "long["))
+  Pst.Dec(idPointer)
+  Pst.Str(string("] = "))
+  Pst.Dec(fileId)
   'Cnc.PressToContinue           
   result := 1
   
@@ -637,27 +427,25 @@ PUB SelectToExecute(idPointer, size) : doneFlag | localPtr[8], {
   Cnc.SetOled(Header#AXES_READOUT_OLED, @selectFileTxt, @oledPtr, filesToDisplay + 1)
   highlightedLine := 1
   Cnc.SetAdcChannels(Header#JOY_Y_ADC, Header#JOY_Z_ADC)
-  Com.Tx(0, 11)
-  Com.Tx(0, 13)
-  Com.Tx(0, 12)
-  Com.Tx(0, 0)
-  'Pst.ClearBelow
-  'Pst.Clear
+  Pst.ClearEnd
+  Pst.Newline
+  Pst.ClearBelow
+  Pst.Clear
   
   filesToDisplay := size <# 7
   repeat localIdex from 1 to 7
     oledPtr[localIdex] := idPointer + (4 * (localIdex - 1))
       
   repeat 'until doneFlag
-    result := CheckTerminalInput(Com.RxHowFull(0), filesToDisplay, idPtrOffset)
-    Com.Tx(0, 1)
+    result := CheckTerminalInput(Pst.RxCount, filesToDisplay, idPtrOffset)
+    Pst.Home
     Cnc.ReadAdc
     result := GetJoystick(Header#JOY_Y_ADC, -Header#DEFAULT_DEADBAND * 4)
-    Com.Str(0, string(11, 13, "result Y ="))               
-    Com.Dec(0, result)
+    Pst.str(string(11, 13, "result Y ="))               
+    Pst.Dec(result)
     result += GetJoystick(Header#JOY_Z_ADC, Header#DEFAULT_DEADBAND * 4)
-    Com.Str(0, string(11, 13, "result Y + Z ="))               
-    Com.Dec(0, result)
+    Pst.str(string(11, 13, "result Y + Z ="))               
+    Pst.Dec(result)
     if result > 0 and highlightedLine < filesToDisplay
       highlightedLine++
     elseif result > 0 and highlightedLine == 7 and idPtrOffset < maxOffset
@@ -674,14 +462,14 @@ PUB SelectToExecute(idPointer, size) : doneFlag | localPtr[8], {
       Cnc.SetOled(Header#AXES_READOUT_OLED, @selectFileTxt, @oledPtr, filesToDisplay + 1)
      
     highlightedFile := highlightedLine + idPtrOffset 
-    Com.Str(0, string(11, 13, "idPtrOffset ="))               
-    Com.Dec(0, idPtrOffset)
-    Com.Str(0, string(11, 13, "highlightedLine ="))               
-    Com.Dec(0, highlightedLine)
-    Com.Str(0, string(11, 13, "highlightedFile ="))               
-    Com.Dec(0, highlightedFile)
-    Com.Tx(0, 11)
-    Com.Tx(0, 13)
+    Pst.str(string(11, 13, "idPtrOffset ="))               
+    Pst.Dec(idPtrOffset)
+    Pst.str(string(11, 13, "highlightedLine ="))               
+    Pst.Dec(highlightedLine)
+    Pst.str(string(11, 13, "highlightedFile ="))               
+    Pst.Dec(highlightedFile)
+    Pst.ClearEnd
+    Pst.Newline
     Cnc.ReadableBin(Cnc.Get165Value, 32)
     Cnc.SetInvert(0, highlightedLine * 8, Header#MAX_OLED_X, (highlightedLine * 8) + 7)
     'Cnc.PressToContinue
@@ -691,7 +479,7 @@ PUB CheckTerminalInput(tempValue, filesToDisplay, idPtrOffset) | localIdex
   result := 1
   
   if tempValue
-    tempValue := Com.Rx(0)
+    tempValue := Pst.CharIn
     
     case tempValue
       "+", "-":
@@ -706,52 +494,52 @@ PUB CheckTerminalInput(tempValue, filesToDisplay, idPtrOffset) | localIdex
     tempValue := highlightedLine
     result := Cnc.Get165Value & buttonMask
 
-  Com.Tx(0, 11)
-  Com.Tx(0, 13)
-  Com.Str(0, @selectFileTxt)
+  Pst.ClearEnd
+  Pst.Newline
+  Pst.str(@selectFileTxt)
   repeat localIdex from 1 to filesToDisplay
-    Com.Tx(0, 11)
-    Com.Tx(0, 13)
-    Com.Dec(0, localIdex)
-    Com.Str(0, string(")"))
-    Com.Str(0, @cncNumber)           
-    Com.Dec(0, long[oledPtr[localIdex]])
+    Pst.ClearEnd
+    Pst.Newline
+    Pst.Dec(localIdex)
+    Pst.str(string(")"))
+    Pst.str(@cncNumber)           
+    Pst.Dec(long[oledPtr[localIdex]])
     
   ifnot result
     'Cnc.InvertOff
     case tempValue
       1..7:
         activeFile := fileIdNumber[tempValue + idPtrOffset - 1]
-        Com.Str(0, string(11, 13, "activeFile = fileIdNumber["))               
-        Com.Dec(0, tempValue)
-        Com.Str(0, string(" + "))               
-        Com.Dec(0, idPtrOffset)
-        Com.Str(0, string(" - 1] = "))           
-        Com.Dec(0, activeFile)
+        Pst.str(string(11, 13, "activeFile = fileIdNumber["))               
+        Pst.Dec(tempValue)
+        Pst.str(string(" + "))               
+        Pst.Dec(idPtrOffset)
+        Pst.str(string(" - 1] = "))           
+        Pst.Dec(activeFile)
         executeState := ACTIVE_EXECUTE
         Cnc.PressToContinue
         Cnc.InvertOff
         abort
       {13:
         activeFile := fileIdNumber[tempValue + idPtrOffset - 1]
-        Com.Str(0, string(11, 13, "activeFile = fileIdNumber["))               
-        Com.Dec(0, tempValue)
-        Com.Str(0, string(" + "))               
-        Com.Dec(0, idPtrOffset)
-        Com.Str(0, string(" - 1] = "))           
-        Com.Dec(0, activeFile)
+        Pst.str(string(11, 13, "activeFile = fileIdNumber["))               
+        Pst.Dec(tempValue)
+        Pst.str(string(" + "))               
+        Pst.Dec(idPtrOffset)
+        Pst.str(string(" - 1] = "))           
+        Pst.Dec(activeFile)
         executeState := ACTIVE_EXECUTE
         Cnc.PressToContinue
         Cnc.InvertOff
         abort   }
       "+":
         result := 1
-        Com.Str(0, string(11, 13, "+ result := 1"))
+        Pst.str(string(11, 13, "+ result := 1"))
         Cnc.PressToContinue
         return
       "-":
         result := -1
-        Com.Str(0, string(11, 13, "- result := -1"))
+        Pst.str(string(11, 13, "- result := -1"))
         Cnc.PressToContinue
         return
       other:
@@ -772,10 +560,10 @@ CON
       
 PUB ActiveExecute
 
-  Com.Str(0, string(11, 13, "ActiveExecute Method"))
-  Com.Str(0, string(11, 13, "activeFile = "))
-  Com.Dec(0, activeFile)
-  Com.Str(0, string(11, 13, "Calling InterpreteDesign Method"))
+  Pst.Str(string(11, 13, "ActiveExecute Method"))
+  Pst.Str(string(11, 13, "activeFile = "))
+  Pst.Dec(activeFile)
+  Pst.Str(string(11, 13, "Calling InterpreteDesign Method"))
   InterpreteDesign(activeFile)
   repeat
   executeState := INIT_EXECUTE
@@ -791,8 +579,8 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
   parameterIndex := 0
   scratchValue := 0
   activeRow := 0
-  {Com.Str(0, string(11, 13, "accelerationTable[0] = "))
-  Com.Dec(0, accelerationTable[0])
+  {Pst.str(string(11, 13, "accelerationTable[0] = "))
+  Pst.Dec(accelerationTable[0])
   PressToContinueOrClose("c")   }
 
   '**** should this be moved?
@@ -802,53 +590,53 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
   codeType := 0
   'longfill(@longCount, 0, Header#NUMBER_OF_AXES)
   
-  Com.Str(0, string(11, 13, "InterpreteDesign("))
-  Com.Dec(0, fileIndex)
-  Com.Tx(0, ")")      '0123456789012345
+  Pst.str(string(11, 13, "InterpreteDesign("))
+  Pst.Dec(fileIndex)
+  Pst.Char(")")      '0123456789012345
   localStr := string(" Opening Design")
-  'Com.Tx(0, 11)
-  ''Com.Tx(0, 13)
-  'Com.Str(0, localStr)
-  'Com.Str(0, string(11, 13, "Opening Design File"))
+  'Pst.ClearEnd
+  ''Pst.Newline
+  'Pst.str(localStr)
+  'Pst.str(string(11, 13, "Opening Design File"))
   
   Cnc.OpenFileToRead(0, fileNamePtr, fileIndex)
 
-  Com.Str(0, string(11, 13, "Design file has been opened."))
+  Pst.str(string(11, 13, "Design file has been opened."))
   'Write4x16String(localStr, 15, activeRow++, 0)
   Cnc.ScrollString(localStr, 1)
   Cnc.ScrollString(fileNamePtr, 1)
   'Cnc.OpenOutputFilesW(fileIndex)
   
-  'Com.Str(0, string(11, 13, "All output files have been opened."))
+  'Pst.str(string(11, 13, "All output files have been opened."))
   '**** Read file once to get extremes.
   repeat
     result := Cnc.ReadByte(0)
     'filePosition[Header#DESIGN_AXIS]++
-    Com.Str(0, string(11, 13, "Character = ", QUOTE))
+    Pst.str(string(11, 13, "Character = ", QUOTE))
     Cnc.SafeTx(result)
-    Com.Tx(0, QUOTE)
+    Pst.Char(QUOTE)
     
     if delimiterCount and result == " " and expectedChar <> COMMENT_CHAR
       delimiterCount := 0
-      Com.Str(0, string(11, 13, "Skipping first space after delimiter."))
+      Pst.str(string(11, 13, "Skipping first space after delimiter."))
       'Cnc.PressToContinue
       next ' skip first space after a delimter
     elseif delimiterCount
       case result
         delimiter[0], delimiter[1], delimiter[2], delimiter[3], delimiter[4]:
           delimiterCount++
-          Com.Str(0, string(" -- Delimiter --"))
-          Com.Str(0, string(11, 13, "delimiterCount = "))
-          Com.Dec(0, delimiterCount)
+          Pst.str(string(" -- Delimiter --"))
+          Pst.str(string(11, 13, "delimiterCount = "))
+          Pst.Dec(delimiterCount)
           result := Cnc.PressToContinueOrClose("c")
           if result
             return
           next ' skip extra delimters
-    Com.Str(0, string(11, 13, "expectedChar = ")) 
-    Com.Str(0, Header.FindString(@expectedCharText, expectedChar))
+    Pst.str(string(11, 13, "expectedChar = ")) 
+    Pst.str(Header.FindString(@expectedCharText, expectedChar))
     
     if result == Header#COMMENT_START_CHAR
-      Com.Str(0, string(11, 13, "Beginning of Comment"))
+      Pst.str(string(11, 13, "Beginning of Comment"))
       previousExpectedChar := expectedChar
       expectedChar := COMMENT_CHAR
       commentIndex := 0
@@ -860,9 +648,9 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
           Header#PROGRAM_NAME_CHAR: '"O"
             GetName(Header#DESIGN_AXIS, @sdProgramName, Header#MAX_NAME_SIZE)
           "G", "M", "D":
-            Com.Str(0, string(11, 13, "Code = ", QUOTE))
-            Com.Tx(0, result)
-            Com.Tx(0, QUOTE)
+            Pst.str(string(11, 13, "Code = ", QUOTE))
+            Pst.Char(result)
+            Pst.Char(QUOTE)
             codeType := result
             expectedChar := CODE_VALUE_CHAR
             scratchValue := 0
@@ -871,13 +659,13 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
           "0".."9":
             scratchValue *= 10
             scratchValue += result - "0"
-            Com.Str(0, string(11, 13, "scratchValue = "))
-            Com.Dec(0, scratchValue)
+            Pst.str(string(11, 13, "scratchValue = "))
+            Pst.Dec(scratchValue)
           delimiter[0], delimiter[1], delimiter[2], delimiter[3], delimiter[4]:
             codeValue := scratchValue
             scratchValue := 0
-            Com.Str(0, string(11, 13, "codeValue = "))
-            Com.Dec(0, codeValue)
+            Pst.str(string(11, 13, "codeValue = "))
+            Pst.Dec(codeValue)
             CodeAction(Header#DESIGN_AXIS, codeType, codeValue)
             delimiterCount := 1
             expectedChar := CODE_TYPE_CHAR
@@ -887,9 +675,9 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
           Header#COMMENT_END_CHAR:
             expectedChar := previousExpectedChar 'CODE_TYPE_CHAR
             newCommentFlag := 1
-            Com.Str(0, string(11, 13, "comment = ", QUOTE))
-            Com.Str(0, @commentFromFile)
-            Com.Tx(0, QUOTE)
+            Pst.str(string(11, 13, "comment = ", QUOTE))
+            Pst.str(@commentFromFile)
+            Pst.Char(QUOTE)
             Cnc.ScrollString(@commentFromFile, 1)
           other:
             if commentIndex < MAX_COMMENT_CHARACTERS 
@@ -906,24 +694,24 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
       'Cnc.WriteLong(endDat)
       'filePosition[result] += 4
     'Sd[result].closeFile
-    Com.Str(0, string(11, 13, "filePosition["))
-    Com.Dec(0, result)
-    Com.Str(0, string("] = "))
-    'Com.Dec(0, filePosition[result])
+    Pst.str(string(11, 13, "filePosition["))
+    Pst.Dec(result)
+    Pst.str(string("] = "))
+    'Pst.Dec(filePosition[result])
     'UnmountSd(result)
     
-  Com.Str(0, string(11, 13, "End of InterpreteDesign method."))
+  Pst.str(string(11, 13, "End of InterpreteDesign method."))
   Cnc.PressToContinue
 
 PUB CodeAction(sdInstance, localType, localValue)
 
-  Com.Str(0, string(11, 13, "CodeAction("))
-  Com.Str(0, Header.FindString(@axesText, sdInstance))
-  Com.Str(0, string(", "))
-  Com.Tx(0, localType)
-  Com.Str(0, string(", "))
-  Com.Dec(0, localValue)
-  Com.Tx(0, ")")
+  Pst.str(string(11, 13, "CodeAction("))
+  Pst.str(Header.FindString(@axesText, sdInstance))
+  Pst.str(string(", "))
+  Pst.Char(localType)
+  Pst.str(string(", "))
+  Pst.Dec(localValue)
+  Pst.Char(")")
    
   case localType
     "G":
@@ -935,13 +723,13 @@ PUB CodeAction(sdInstance, localType, localValue)
     
 PUB ReadG(sdInstance, localValue)
 
-  Com.Str(0, string(11, 13, "ReadG("))
-  Com.Str(0, Header.FindString(@axesText, sdInstance))
-  Com.Str(0, string(", "))
-  Com.Dec(0, localValue)
-  Com.Str(0, string(" = "))
-  Com.Str(0, Header.FindString(@gCodeText, localValue))
-  Com.Tx(0, ")")
+  Pst.str(string(11, 13, "ReadG("))
+  Pst.str(Header.FindString(@axesText, sdInstance))
+  Pst.str(string(", "))
+  Pst.Dec(localValue)
+  Pst.str(string(" = "))
+  Pst.str(Header.FindString(@gCodeText, localValue))
+  Pst.Char(")")
   
   case localValue
     Header#RAPID_POSITION_G: 'G00
@@ -963,7 +751,7 @@ PUB ReadG(sdInstance, localValue)
     Header#TOOL_HEIGHT_COMP_OFF_G:
     Header#LOCAL_SYSTEM_G, Header#MACHINE_SYSTEM_G, Header#WORK_SYSTEM_G:
     
-  Com.Str(0, string(11, 13, "End of ReadG method."))
+  Pst.str(string(11, 13, "End of ReadG method."))
 
 {
   ' supported G-Codes
@@ -997,13 +785,13 @@ PUB SetZDown(localDownFlag)
     
 PUB GetStepsFromUnits(localUnits, localValue, localMultiplier)
 
-  Com.Str(0, string(11, 13, "GetStepsFromUnits("))
-  Com.Str(0, Header.FindString(@unitsText, localUnits))
-  Com.Str(0, string(", "))
-  Com.Dec(0, localValue)
-  Com.Str(0, string(", "))
-  Com.Dec(0, localMultiplier)
-  Com.Str(0, string(") result = "))
+  Pst.str(string(11, 13, "GetStepsFromUnits("))
+  Pst.str(Header.FindString(@unitsText, localUnits))
+  Pst.str(string(", "))
+  Pst.Dec(localValue)
+  Pst.str(string(", "))
+  Pst.Dec(localMultiplier)
+  Pst.str(string(") result = "))
   
   case localUnits
     Header#STEP_UNIT:
@@ -1024,7 +812,7 @@ PUB GetStepsFromUnits(localUnits, localValue, localMultiplier)
       
   result *= microsteps
   
-  Com.Dec(0, result)
+  Pst.Dec(result)
       
 PRI GetLine(sdInstance) | x0, y0, stepPosition[2], longAxis, shortAxis, localBuffer[7], {
 } localStr, multiplier[2], decPoints[2], original[2], size, localIndex
@@ -1073,9 +861,9 @@ PRI GetLine(sdInstance) | x0, y0, stepPosition[2], longAxis, shortAxis, localBuf
     shortAxis := Header#X_AXIS
   'else
   '  result := OneSlope(x0, y0)
-  'Com.Tx(0, 11)
-  'Com.Tx(0, 13)
-  'Com.Str(0, localStr)
+  'Pst.ClearEnd
+  'Pst.Newline
+  'Pst.Str(localStr)
   
   Cnc.ScrollString(localStr, 1)
 
@@ -1101,33 +889,33 @@ PRI GetLine(sdInstance) | x0, y0, stepPosition[2], longAxis, shortAxis, localBuf
     Cnc.ScrollString(@localBuffer, 1)
 
   
-  Motor.MoveLine(longAxis, shortAxis, x0[longAxis], x0[shortAxis])
+ 
   '''Motor.MoveLine(longAxis, shortAxis, x0[longAxis], x0[shortAxis])
   
  { result := SlopedLine(longAxis, shortAxis, x0[longAxis], x0[shortAxis])
          
-  Com.Str(0, string(11, 13, "Writing total delay to all files."))
-  Com.Str(0, string(11, 13, "Total delay "))
-  Com.Str(0, FindString(@axesText, shortAxis))
-  Com.Str(0, string(" = "))
-  Com.Dec(0, long[result][0])
-  Com.Str(0, string(11, 13, "Total delay "))
-  Com.Str(0, FindString(@axesText, longAxis))
-  Com.Str(0, string(" = "))
-  Com.Dec(0, long[result][1])
-  Com.Str(0, string(11, 13, "Total delay "))
-  Com.Str(0, FindString(@axesText, Header#Z_AXIS))
-  Com.Str(0, string(" = "))
+  Pst.str(string(11, 13, "Writing total delay to all files."))
+  Pst.str(string(11, 13, "Total delay "))
+  Pst.Str(FindString(@axesText, shortAxis))
+  Pst.str(string(" = "))
+  Pst.Dec(long[result][0])
+  Pst.str(string(11, 13, "Total delay "))
+  Pst.Str(FindString(@axesText, longAxis))
+  Pst.str(string(" = "))
+  Pst.Dec(long[result][1])
+  Pst.str(string(11, 13, "Total delay "))
+  Pst.Str(FindString(@axesText, Header#Z_AXIS))
+  Pst.str(string(" = "))
   
   
   'Sd[longAxis].writeLong(long[result][1]) ' write total time
   'Sd[shortAxis].writeLong(long[result][0])
   if long[result][0] > long[result][1]
     'Sd[Header#Z_AXIS].writeLong(long[result][0])
-    Com.Dec(0, long[result][0])
+    Pst.Dec(long[result][0])
   else
     'Sd[Header#Z_AXIS].writeLong(long[result][1])
-    Com.Dec(0, long[result][1])
+    Pst.Dec(long[result][1])
   'filePosition[Header#X_AXIS] += 4
   'filePosition[Header#Y_AXIS] += 4
   'filePosition[Header#Z_AXIS] += 4       }
@@ -1148,15 +936,15 @@ PUB DecSize(value)
   'longfill(@totalTimeSlow, 0, 2)
   'accelPtr := @accelerationTable
 
-  Com.Str(0, string(11, 13, "SlopedLine("))
-  Com.Str(0, FindString(@axesText, longAxis))
-  Com.Str(0, string(", "))
-  Com.Str(0, FindString(@axesText, shortAxis))
-  Com.Str(0, string(", "))
-  Com.Dec(0, longDistance)
-  Com.Str(0, string(", "))
-  Com.Dec(0, shortDistance)
-  Com.Str(0, string(") "))
+  Pst.str(string(11, 13, "SlopedLine("))
+  Pst.Str(FindString(@axesText, longAxis))
+  Pst.str(string(", "))
+  Pst.Str(FindString(@axesText, shortAxis))
+  Pst.str(string(", "))
+  Pst.Dec(longDistance)
+  Pst.str(string(", "))
+  Pst.Dec(shortDistance)
+  Pst.str(string(") "))
 
   localDebugFlag := GetDebugFlag("d")
   
@@ -1189,22 +977,22 @@ PUB DecSize(value)
     full[0] := shortDistance - (accel[0] + decel[0])
 
   repeat localIndex from 0 to 1
-    Com.Str(0, string(11, 13, "accel["))
-    Com.Str(0, FindString(@accelChanTextB, localIndex))
-    Com.Str(0, string("] = "))
-    Com.Dec(0, accel[localIndex])
-    Com.Str(0, string(11, 13, "decel["))
-    Com.Str(0, FindString(@accelChanTextB, localIndex))
-    Com.Str(0, string("] = "))
-    Com.Dec(0, decel[localIndex])
-    Com.Str(0, string(11, 13, "full["))
-    Com.Str(0, FindString(@accelChanTextB, localIndex))
-    Com.Str(0, string("] = "))
-    Com.Dec(0, full[localIndex])
+    Pst.str(string(11, 13, "accel["))
+    Pst.Str(FindString(@accelChanTextB, localIndex))
+    Pst.str(string("] = "))
+    Pst.Dec(accel[localIndex])
+    Pst.str(string(11, 13, "decel["))
+    Pst.Str(FindString(@accelChanTextB, localIndex))
+    Pst.str(string("] = "))
+    Pst.Dec(decel[localIndex])
+    Pst.str(string(11, 13, "full["))
+    Pst.Str(FindString(@accelChanTextB, localIndex))
+    Pst.str(string("] = "))
+    Pst.Dec(full[localIndex])
 
   if full[0] < 0
-    Com.Str(0, string(11, 13, "************ Error! full[0] < 0 ************"))
-    Com.Str(0, string(11, 13, "Recommend closing files."))
+    Pst.str(string(11, 13, "************ Error! full[0] < 0 ************"))
+    Pst.str(string(11, 13, "Recommend closing files."))
   PressToContinueOrClose("c")
  
   totalTimeFast := 0
@@ -1231,7 +1019,7 @@ PUB DecSize(value)
         } slowIndex, fastIndex, fast, slow, fastestIndex, pauseFlag, headingInterval)
     fastestIndex++
     fastIndex++
-  Com.Str(0, string(11, 13, "Between accel and full."))
+  Pst.str(string(11, 13, "Between accel and full."))
   if localDebugFlag  
     DisplayLineHeading
   fastestIndex--
@@ -1257,7 +1045,7 @@ PUB DecSize(value)
       'fastestIndex++
       fastIndex++
       
-  Com.Str(0, string(11, 13, "Between full and decel."))
+  Pst.str(string(11, 13, "Between full and decel."))
   if localDebugFlag  
     DisplayLineHeading
   headingInterval := decel[1] / 2
@@ -1293,16 +1081,16 @@ PUB DecSize(value)
 
     if longDistance > doubleAccel 
       repeat localIndex from 0 to 1
-        Com.Str(0, string(11, 13, "accelerationTime["))
-        Com.Str(0, FindString(@accelChanTextB, localIndex))
-        Com.Str(0, string("] = "))
-        Com.Dec(0, accelerationTimeSlave[localIndex])
-        Com.Str(0, string(11, 13, "delayAtMaxSpeed["))
-        Com.Str(0, FindString(@accelChanTextB, localIndex))
-        Com.Str(0, string("] = "))
-        Com.Dec(0, delayAtMaxSpeed[localIndex])
-        Com.Str(0, string(11, 13, "Difference in acceleration times = "))
-        Com.Dec(0, ||(accelerationTimeSlave[1] - accelerationTimeSlave[0]))
+        Pst.str(string(11, 13, "accelerationTime["))
+        Pst.Str(FindString(@accelChanTextB, localIndex))
+        Pst.str(string("] = "))
+        Pst.Dec(accelerationTimeSlave[localIndex])
+        Pst.str(string(11, 13, "delayAtMaxSpeed["))
+        Pst.Str(FindString(@accelChanTextB, localIndex))
+        Pst.str(string("] = "))
+        Pst.Dec(delayAtMaxSpeed[localIndex])
+        Pst.str(string(11, 13, "Difference in acceleration times = "))
+        Pst.Dec(||(accelerationTimeSlave[1] - accelerationTimeSlave[0]))
         slowFullSpeedTimeTotal := totalTimeFast - (2 * accelerationTimeSlave[0])
         ' "slowFullSpeedTimeTotal" is the difference in time between the slow and the
         ' fast axes.
@@ -1311,27 +1099,27 @@ PUB DecSize(value)
         
     else
       repeat localIndex from 0 to 1
-       Com.Str(0, string(11, 13, "timeTilFullSpeed["))
-       Com.Str(0, FindString(@accelChanTextB, localIndex))
-       Com.Str(0, string("] = "))
-       Com.Dec(0, timeTilFullSpeed[localIndex])
-       Com.Str(0, string(11, 13, "delayAtMaxSpeed["))
-       Com.Str(0, FindString(@accelChanTextB, localIndex))
-       Com.Str(0, string("] = "))
-       Com.Dec(0, delayAtMaxSpeed[localIndex])
-       Com.Str(0, string(11, 13, "Difference in acceleration times = "))
-       Com.Dec(0, ||(accelerationTimeSlave[1] - accelerationTimeSlave[0]))
+       Pst.str(string(11, 13, "timeTilFullSpeed["))
+       Pst.Str(FindString(@accelChanTextB, localIndex))
+       Pst.str(string("] = "))
+       Pst.Dec(timeTilFullSpeed[localIndex])
+       Pst.str(string(11, 13, "delayAtMaxSpeed["))
+       Pst.Str(FindString(@accelChanTextB, localIndex))
+       Pst.str(string("] = "))
+       Pst.Dec(delayAtMaxSpeed[localIndex])
+       Pst.str(string(11, 13, "Difference in acceleration times = "))
+       Pst.Dec(||(accelerationTimeSlave[1] - accelerationTimeSlave[0]))
        slowFullSpeedTimeTotal := totalTimeFast - (2 * timeTilFullSpeed[0])
         
 
-    Com.Str(0, string(11, 13, "totalTimeFast = ")) '**** Check accel times.
-    Com.Dec(0, totalTimeFast)
-    Com.Str(0, string(11, 13, "Time at full speed on slow axis. (slowFullSpeedTimeTotal) = "))
-    Com.Dec(0, slowFullSpeedTimeTotal)
-    Com.Str(0, string(11, 13, "full[0] = "))
-    Com.Dec(0, full[0])
+    Pst.str(string(11, 13, "totalTimeFast = ")) '**** Check accel times.
+    Pst.Dec(totalTimeFast)
+    Pst.str(string(11, 13, "Time at full speed on slow axis. (slowFullSpeedTimeTotal) = "))
+    Pst.Dec(slowFullSpeedTimeTotal)
+    Pst.str(string(11, 13, "full[0] = "))
+    Pst.Dec(full[0])
     if full[0] == 0
-      Com.Str(0, string(11, 13, "****** Zero full speed (slow) steps. ******"))
+      Pst.str(string(11, 13, "****** Zero full speed (slow) steps. ******"))
       accel[0]--
       decel[0]--
       extraCountsRemaining := 0
@@ -1345,73 +1133,73 @@ PUB DecSize(value)
       lastAccelDelay[0] := slowFullSpeedTimeTotal / 2
       lastAccelDelay[1] := slowFullSpeedTimeTotal - lastAccelDelay[0]
       if lastAccelDelay[0] == lastAccelDelay[1]
-        Com.Str(0, string(11, 13, "Both elements of lastAccelDelay = "))
-        Com.Dec(0, lastAccelDelay[0])
+        Pst.str(string(11, 13, "Both elements of lastAccelDelay = "))
+        Pst.Dec(lastAccelDelay[0])
       else
-        Com.Str(0, string(11, 13, "lastAccelDelay[0] = "))
-        Com.Dec(0, lastAccelDelay[0])
-        Com.Str(0, string(11, 13, "lastAccelDelay[1] = "))
-        Com.Dec(0, lastAccelDelay[1])
-      Com.Str(0, string(11, 13, "accelerationTable["))
-      Com.Dec(0, accel[0])  
-      Com.Str(0, string("] = "))
-      Com.Dec(0, accelerationTable[accel[0]])
+        Pst.str(string(11, 13, "lastAccelDelay[0] = "))
+        Pst.Dec(lastAccelDelay[0])
+        Pst.str(string(11, 13, "lastAccelDelay[1] = "))
+        Pst.Dec(lastAccelDelay[1])
+      Pst.str(string(11, 13, "accelerationTable["))
+      Pst.Dec(accel[0])  
+      Pst.str(string("] = "))
+      Pst.Dec(accelerationTable[accel[0]])
       temp[2] := lastAccelDelay[0] - accelerationTable[accel[0] - 1]
       if ||temp[2] > temp[0]
-        Com.Str(0, string(11, 13, "****** Possible Problem ******"))
-        Com.Str(0, string(11, 13, "||temp[2] > temp[0]"))
-        Com.Str(0, string(11, 13, "old lastAccelDelay[0] = "))
-        Com.Dec(0, lastAccelDelay[0])
-        Com.Str(0, string(11, 13, "temp[0] = "))
-        Com.Dec(0, temp[0])
-        Com.Str(0, string(11, 13, "temp[1] = "))
-        Com.Dec(0, temp[1])
-        Com.Str(0, string(11, 13, "temp[2] = "))
-        Com.Dec(0, temp[2])
+        Pst.str(string(11, 13, "****** Possible Problem ******"))
+        Pst.str(string(11, 13, "||temp[2] > temp[0]"))
+        Pst.str(string(11, 13, "old lastAccelDelay[0] = "))
+        Pst.Dec(lastAccelDelay[0])
+        Pst.str(string(11, 13, "temp[0] = "))
+        Pst.Dec(temp[0])
+        Pst.str(string(11, 13, "temp[1] = "))
+        Pst.Dec(temp[1])
+        Pst.str(string(11, 13, "temp[2] = "))
+        Pst.Dec(temp[2])
         if temp[2] < 0 'temp[0]
           lastAccelDelay[0] := accelerationTable[accel[0] - 1] - temp[0]
         else
           lastAccelDelay[0] := accelerationTable[accel[0] - 1] + temp[0]
         lastAccelDelay[1] := lastAccelDelay[0]
-        Com.Str(0, string(11, 13, "adjusted lastAccelDelay[0] = "))
-        Com.Dec(0, lastAccelDelay[0])
+        Pst.str(string(11, 13, "adjusted lastAccelDelay[0] = "))
+        Pst.Dec(lastAccelDelay[0])
       PressToContinueOrClose("c")
     elseif full[0] == 1
       accel[0]--
       decel[0]--
       extraCountsRemaining := 0
-      Com.Str(0, string(11, 13, "****** Only one full speed (slow) step. ******"))
+      Pst.str(string(11, 13, "****** Only one full speed (slow) step. ******"))
       temp[0] := accelerationTable[accel[0] - 1] - accelerationTable[accel[0]]
       temp[1] := ||(accelerationTable[accel[0]] - slowFullSpeedTimeTotal)
       if temp[1] > temp[0]
-        Com.Str(0, string(11, 13, "****** Possible Problem ******"))
-        Com.Str(0, string(11, 13, "temp[1] > temp[0]"))
-        Com.Str(0, string(11, 13, "temp[0] = "))
-        Com.Dec(0, temp[0])
-        Com.Str(0, string(11, 13, "temp[1] = "))
-        Com.Dec(0, temp[1])
-        Com.Str(0, string(11, 13, "next to last accel = "))
-        Com.Dec(0, accelerationTable[accel[0] - 1])
-        Com.Str(0, string(11, 13, "last accel = "))
-        Com.Dec(0, accelerationTable[accel[0]])
-        Com.Str(0, string(11, 13, "FullSpeed = "))
-        Com.Dec(0, slowFullSpeedTimeTotal)
-        Com.Str(0, string(11, 13, "Combine and divide middle three."))
+        Pst.str(string(11, 13, "****** Possible Problem ******"))
+        Pst.str(string(11, 13, "temp[1] > temp[0]"))
+        Pst.str(string(11, 13, "temp[0] = "))
+        Pst.Dec(temp[0])
+        Pst.str(string(11, 13, "temp[1] = "))
+        Pst.Dec(temp[1])
+        Pst.str(string(11, 13, "next to last accel = "))
+        Pst.Dec(accelerationTable[accel[0] - 1])
+        Pst.str(string(11, 13, "last accel = "))
+        Pst.Dec(accelerationTable[accel[0]])
+        Pst.str(string(11, 13, "FullSpeed = "))
+        Pst.Dec(slowFullSpeedTimeTotal)
+        Pst.str(string(11, 13, "Combine and divide middle three."))
         temp[2] := ((2 * accelerationTable[accel[0]]) + slowFullSpeedTimeTotal)
         lastAccelDelay[0] := temp[2] / 3
         lastAccelDelay[1] := lastAccelDelay[0]
         slowFullSpeedTimeTotal := temp[2] - (2 * lastAccelDelay[0])
-        Com.Str(0, string(11, 13, "lastAccelDelay[0 & 1] = "))
-        Com.Dec(0, lastAccelDelay[0])
-        Com.Str(0, string(11, 13, "slowFullSpeedTimeTotal = "))
-        Com.Dec(0, slowFullSpeedTimeTotal)
-        Com.Str(0, string(11, 13, "Is this okay?"))
+        Pst.str(string(11, 13, "lastAccelDelay[0 & 1] = "))
+        Pst.Dec(lastAccelDelay[0])
+        Pst.str(string(11, 13, "slowFullSpeedTimeTotal = "))
+        Pst.Dec(slowFullSpeedTimeTotal)
+        Pst.str(string(11, 13, "Is this okay?"))
         temp[1] := accelerationTable[accel[0] - 1] - lastAccelDelay[0]
         if ||temp[1] > temp[0]
-          Com.Str(0, string(11, 13, "****** Possible Problem Again ******"))
-          Com.Str(0, string(11, 13, "||temp[1] > temp[0]"))
-          Com.Str(0, string(11, 13, "old lastAccelDelay[0] = "))
-          Com.Dec(0, lastAccelDelay[0])  
+          Pst.str(string(11, 13, "****** Possible Problem Again ******"))
+          Pst.str(string(11, 13, "||temp[1] > temp[0]"))
+          Pst.str(string(11, 13, "old lastAccelDelay[0] = "))
+          Pst.Dec(lastAccelDelay[0])  
           if temp[1] < 0 'temp[0]
             lastAccelDelay[0] := accelerationTable[accel[0] - 1] - temp[0]
             slowFullSpeedTimeTotal := lastAccelDelay[0] - temp[0]
@@ -1419,10 +1207,10 @@ PUB DecSize(value)
             lastAccelDelay[0] := accelerationTable[accel[0] - 1] + temp[0]
             slowFullSpeedTimeTotal := lastAccelDelay[0] + temp[0]
           lastAccelDelay[1] := lastAccelDelay[0]
-          Com.Str(0, string(11, 13, "adjusted lastAccelDelay[0] = "))
-          Com.Dec(0, lastAccelDelay[0])
-          Com.Str(0, string(11, 13, "adjusted slowFullSpeedTimeTotal = "))
-          Com.Dec(0, slowFullSpeedTimeTotal)  
+          Pst.str(string(11, 13, "adjusted lastAccelDelay[0] = "))
+          Pst.Dec(lastAccelDelay[0])
+          Pst.str(string(11, 13, "adjusted slowFullSpeedTimeTotal = "))
+          Pst.Dec(slowFullSpeedTimeTotal)  
       else
         lastAccelDelay[0] := accelerationTable[accel[0]]
         lastAccelDelay[1] := lastAccelDelay[0]
@@ -1433,15 +1221,15 @@ PUB DecSize(value)
       lastAccelDelay[1] := slowFullSpeedTimeTotal - lastAccelDelay[0] }
       PressToContinueOrClose("c")
     else  
-      Com.Str(0, string(11, 13, "time per step = "))
+      Pst.str(string(11, 13, "time per step = "))
       slowFullSpeedTime := slowFullSpeedTimeTotal / full[0] 
-      Com.Dec(0, slowFullSpeedTime) 
+      Pst.Dec(slowFullSpeedTime) 
       extraCountsRemaining := slowFullSpeedRemainder := slowFullSpeedTimeTotal // full[0]           
       addExtraCountInterval := full[0] / extraCountsRemaining
-      Com.Str(0, string(11, 13, "slowFullSpeedRemainder = "))
-      Com.Dec(0, slowFullSpeedRemainder)
-      Com.Str(0, string(11, 13, "addExtraCountInterval = "))
-      Com.Dec(0, addExtraCountInterval)
+      Pst.str(string(11, 13, "slowFullSpeedRemainder = "))
+      Pst.Dec(slowFullSpeedRemainder)
+      Pst.str(string(11, 13, "addExtraCountInterval = "))
+      Pst.Dec(addExtraCountInterval)
     fastestIndex := 0
     headingInterval := accel[0] / 2
     pauseFlag := 1
@@ -1469,13 +1257,13 @@ PUB DecSize(value)
              
     fastestIndex--
 
-    Com.Str(0, string(11, 13, "fastest slow accelerationTable = "))
-    Com.Dec(0, slow)
-    Com.Str(0, string(11, 13, "slowFullSpeedTime = "))
-    Com.Dec(0, slowFullSpeedTime)
+    Pst.str(string(11, 13, "fastest slow accelerationTable = "))
+    Pst.Dec(slow)
+    Pst.str(string(11, 13, "slowFullSpeedTime = "))
+    Pst.Dec(slowFullSpeedTime)
     PressToContinueOrClose("c")
       
-    Com.Str(0, string(11, 13, "Between accel and full."))
+    Pst.str(string(11, 13, "Between accel and full."))
     if localDebugFlag  
       DisplayLineHeading
     headingInterval := full[0] / 4
@@ -1496,12 +1284,12 @@ PUB DecSize(value)
           } slowIndex, slowIndex{fastIndex}, fast, slow, fastestIndex, pauseFlag, headingInterval)
         slowIndex++
 
-    Com.Str(0, string(11, 13, "Between full and decel."))
+    Pst.str(string(11, 13, "Between full and decel."))
     if localDebugFlag  
       DisplayLineHeading
     if extraCountsRemaining
-      Com.Str(0, string(11, 13, "extraCountsRemaining = "))
-      Com.Dec(0, extraCountsRemaining)
+      Pst.str(string(11, 13, "extraCountsRemaining = "))
+      Pst.Dec(extraCountsRemaining)
       PressToContinueOrClose("c")  
 
     headingInterval := decel[0] / 4
@@ -1529,47 +1317,47 @@ PUB DecSize(value)
       slowIndex++
 
     if ++fastestIndex
-      Com.Str(0, string(11, 13, "fastestIndex is not zero."))
-      Com.Str(0, string(11, 13, "fastestIndex = "))
-      Com.Dec(0, fastestIndex)      
+      Pst.str(string(11, 13, "fastestIndex is not zero."))
+      Pst.str(string(11, 13, "fastestIndex = "))
+      Pst.Dec(fastestIndex)      
     PressToContinueOrClose("c")
 
         
   if slowIndex <> shortDistance or fastIndex <> longDistance
-    Com.Str(0, string(11, 13, "Distances don't match."))
-    Com.Str(0, string(11, 13, "slowIndex = "))
-    Com.Dec(0, slowIndex)
-    Com.Str(0, string(11, 13, "shortDistance = "))
-    Com.Dec(0, shortDistance)
-    Com.Str(0, string(11, 13, "fastIndex = "))
-    Com.Dec(0, fastIndex)
-    Com.Str(0, string(11, 13, "longDistance = "))
-    Com.Dec(0, longDistance)
+    Pst.str(string(11, 13, "Distances don't match."))
+    Pst.str(string(11, 13, "slowIndex = "))
+    Pst.Dec(slowIndex)
+    Pst.str(string(11, 13, "shortDistance = "))
+    Pst.Dec(shortDistance)
+    Pst.str(string(11, 13, "fastIndex = "))
+    Pst.Dec(fastIndex)
+    Pst.str(string(11, 13, "longDistance = "))
+    Pst.Dec(longDistance)
     PressToContinueOrClose("c")
 
   result := @totalTimeSlow  
                         }
 PRI DisplayLineHeading
 
-  Com.Str(0, string(11, 13, "fastIndex, slowIndex, fast, slow, totalTimeFast, totalTimeSlow, fastestIndex"))
+  Pst.str(string(11, 13, "fastIndex, slowIndex, fast, slow, totalTimeFast, totalTimeSlow, fastestIndex"))
     
 PRI DisplayLineStats(localTimeFast, localTimeSlow, slowIndex, fastIndex, fast, slow, {
 } fastestIndex, pauseFlag, headingInterval)
 
-  Com.Str(0, string(11, 13))
-  Com.Dec(0, fastIndex)
-  Com.Str(0, string(", "))
-  Com.Dec(0, slowIndex)
-  Com.Str(0, string(", "))
-  Com.Dec(0, fast)
-  Com.Str(0, string(", "))
-  Com.Dec(0, slow)
-  Com.Str(0, string(", "))
-  Com.Dec(0, localTimeFast)
-  Com.Str(0, string(", "))
-  Com.Dec(0, localTimeSlow)
-  Com.Str(0, string(", "))
-  Com.Dec(0, fastestIndex)
+  Pst.str(string(11, 13))
+  Pst.Dec(fastIndex)
+  Pst.str(string(", "))
+  Pst.Dec(slowIndex)
+  Pst.str(string(", "))
+  Pst.Dec(fast)
+  Pst.str(string(", "))
+  Pst.Dec(slow)
+  Pst.str(string(", "))
+  Pst.Dec(localTimeFast)
+  Pst.str(string(", "))
+  Pst.Dec(localTimeSlow)
+  Pst.str(string(", "))
+  Pst.Dec(fastestIndex)
   if fastIndex // headingInterval == 0
     DisplayLineHeading
     if pauseFlag
@@ -1577,14 +1365,14 @@ PRI DisplayLineStats(localTimeFast, localTimeSlow, slowIndex, fastIndex, fast, s
 
 {PRI GetDec(sdInstance) | inputCharacter, negativeFlag, startOfNumberFlag
 
-  Com.Str(0, string(11, 13, "GetDec"))
+  Pst.str(string(11, 13, "GetDec"))
   globalMultiplier := 0
   longfill(@negativeFlag, 0, 2)
 
   repeat
     inputCharacter := Cnc.ReadByte(0)
     'filePosition[sdInstance]++
-    Com.Str(0, string(11, 13, "inputCharacter = "))
+    Pst.str(string(11, 13, "inputCharacter = "))
     Cnc.SafeTx(inputCharacter)
     case inputCharacter
       "0".."9":
@@ -1597,17 +1385,17 @@ PRI DisplayLineStats(localTimeFast, localTimeSlow, slowIndex, fastIndex, fast, s
       "-":
         negativeFlag := 1  
       " ":
-        Com.Str(0, string(11, 13, "Ignore space character."))
+        Pst.str(string(11, 13, "Ignore space character."))
       delimiter[0], delimiter[1], delimiter[2], delimiter[3], delimiter[4]:
         if startOfNumberFlag
           inputCharacter := delimiter[0]
         else
           inputCharacter := " "
       other:
-        Com.Str(0, string(11, 13, "GetDec Error"))
-        Com.Str(0, string(11, 13, "So far result = "))
-        Com.Dec(0, result)
-        Com.Str(0, string(11, 13, "Unexpected byte = $"))
+        Pst.str(string(11, 13, "GetDec Error"))
+        Pst.str(string(11, 13, "So far result = "))
+        Pst.Dec(result)
+        Pst.str(string(11, 13, "Unexpected byte = $"))
         Pst.Hex(inputCharacter, 2)
         Cnc.PressToContinue
         'waitcnt(clkfreq * 2 + cnt)
@@ -1619,46 +1407,46 @@ PRI DisplayLineStats(localTimeFast, localTimeSlow, slowIndex, fastIndex, fast, s
   ifnot globalMultiplier
     globalMultiplier := 1
 
-  Com.Str(0, string(11, 13, "GetDec result = "))
-  Com.Dec(0, result)
+  Pst.str(string(11, 13, "GetDec result = "))
+  Pst.Dec(result)
     }
 PUB ReadM(sdInstance, localValue) : parameterCount | inputCharacter, expectedParameters, {
 } delimiterCount
 
-  Com.Str(0, string(11, 13, "ReadM("))
-  Com.Str(0, Header.FindString(@axesText, sdInstance))
-  Com.Str(0, string(", "))
-  Com.Dec(0, localValue)
-  Com.Str(0, string(" = "))
-  Com.Str(0, Header.FindString(@mCodeText, localValue))
-  Com.Tx(0, ")")
+  Pst.str(string(11, 13, "ReadM("))
+  Pst.str(Header.FindString(@axesText, sdInstance))
+  Pst.str(string(", "))
+  Pst.Dec(localValue)
+  Pst.str(string(" = "))
+  Pst.str(Header.FindString(@mCodeText, localValue))
+  Pst.Char(")")
 
   delimiterCount := 1
   
   case localValue
     Header#COMPULSORY_STOP_M, Header#OPTIONAL_STOP_M: ' when would these be used?
-      Com.Str(0, string(11, 13, "This M code is not yet supported."))
+      Pst.str(string(11, 13, "This M code is not yet supported."))
       expectedParameters := 0
     Header#END_OF_PROGRAM_M: 'M02
       endFlag := 1
-      Com.Str(0, string(11, 13, "End of program."))
+      Pst.str(string(11, 13, "End of program."))
       expectedParameters := 0
    { SPINDLE_ON_CCW_M:
     SPINDLE_STOP_M:  }
     other:
-      Com.Str(0, string(11, 13, "This M code is not yet supported."))
+      Pst.str(string(11, 13, "This M code is not yet supported."))
       expectedParameters := 1
   expectedParameters := 0
   
-  Com.Str(0, string(11, 13))
-  Com.Str(0, Header.FindString(@mCodeText, localValue))
+  Pst.str(string(11, 13))
+  Pst.str(Header.FindString(@mCodeText, localValue))
     
   if expectedParameters
-    Com.Str(0, string(" = "))
+    Pst.str(string(" = "))
     repeat  
       inputCharacter := Cnc.readByte(0)
       'filePosition[sdInstance]++
-      Com.Tx(0, inputCharacter)
+      Pst.Char(inputCharacter)
       case inputCharacter
         delimiter[0], delimiter[1], delimiter[2], delimiter[3], delimiter[4]:
           ifnot delimiterCount
@@ -1668,9 +1456,9 @@ PUB ReadM(sdInstance, localValue) : parameterCount | inputCharacter, expectedPar
           delimiterCount := 0
     until parameterCount == expectedParameters 
   else
-    Com.Str(0, string(" has no parameters."))
+    Pst.str(string(" has no parameters."))
       
-  Com.Str(0, string(11, 13, "End of ReadM method."))  
+  Pst.str(string(11, 13, "End of ReadM method."))  
 {
   ' M-Codes
   #0, COMPULSORY_STOP_M, OPTIONAL_STOP_M, END_OF_PROGRAM_M, SPINDLE_ON_CCW_M
@@ -1679,13 +1467,13 @@ PUB ReadM(sdInstance, localValue) : parameterCount | inputCharacter, expectedPar
 PUB ReadD(sdInstance, localValue) : parameterCount | inputCharacter, expectedParameters, {
 } delimiterCount
 
-  Com.Str(0, string(11, 13, "ReadD("))
-  Com.Str(0, Header.FindString(@axesText, sdInstance))
-  Com.Str(0, string(", "))
-  Com.Dec(0, localValue)
-  Com.Str(0, string(" = "))
-  Com.Str(0, Header.FindString(@dCodeText, localValue))
-  Com.Tx(0, ")")
+  Pst.str(string(11, 13, "ReadD("))
+  Pst.str(Header.FindString(@axesText, sdInstance))
+  Pst.str(string(", "))
+  Pst.Dec(localValue)
+  Pst.str(string(" = "))
+  Pst.str(Header.FindString(@dCodeText, localValue))
+  Pst.Char(")")
 
   delimiterCount := 1
                      
@@ -1699,21 +1487,21 @@ PUB ReadD(sdInstance, localValue) : parameterCount | inputCharacter, expectedPar
 
   case localValue
     Header#POINT_D, Header#START_D, Header#TOOL_RADIUS_UNITS_D:
-      Com.Str(0, string(11, 13, "This D code is not yet supported."))
+      Pst.str(string(11, 13, "This D code is not yet supported."))
 
   {case localValue
     PART_VERSION_D, PART_NAME_D, PARTS_IN_FILE_D, DATE_CREATED_D, DATE_MODIFIED_D, {
       } PROGRAM_NAME_D, EXTERNALLY_CREATED_D, CREATED_USING_PROGRAM_D, AUTHOR_NAME_D, {
       } PROJECT_NAME_D: }
-  Com.Str(0, string(11, 13))
-  Com.Str(0, Header.FindString(@dCodeText, localValue))
+  Pst.str(string(11, 13))
+  Pst.str(Header.FindString(@dCodeText, localValue))
     
   if expectedParameters
-    Com.Str(0, string(" = "))
+    Pst.str(string(" = "))
     repeat  
       inputCharacter := Cnc.readByte(0)
       'filePosition[sdInstance]++
-      Com.Tx(0, inputCharacter)
+      Pst.Char(inputCharacter)
       case inputCharacter
         delimiter[0], delimiter[1], delimiter[2], delimiter[3], delimiter[4]:
           ifnot delimiterCount
@@ -1723,8 +1511,8 @@ PUB ReadD(sdInstance, localValue) : parameterCount | inputCharacter, expectedPar
           delimiterCount := 0
     until parameterCount == expectedParameters
   else
-    Com.Str(0, string(" has no parameters."))  
-  Com.Str(0, string(11, 13, "End of ReadD method."))
+    Pst.str(string(" has no parameters."))  
+  Pst.str(string(11, 13, "End of ReadD method."))
       
 PUB GetName(sdInstance, localPtr, localSize)
 
@@ -1744,12 +1532,12 @@ PUB GetName(sdInstance, localPtr, localSize)
     case result
       delimiter[0], delimiter[1], delimiter[2], delimiter[3], delimiter[4]:
         result := delimiter[0]
-        Com.Str(0, string(11, 13, "Error, the program name was too long."))
+        Pst.str(string(11, 13, "Error, the program name was too long."))
         waitcnt(clkfreq * 2 + cnt)
 
 PUB OpenConfig
 
-  Com.Str(0, string(11, 13, "OpenConfig Method"))
+  Pst.Str(string(11, 13, "OpenConfig Method"))
   Cnc.PressToContinue
   sdFlag := Cnc.OpenConfig(@programState)
   
@@ -1757,26 +1545,26 @@ PUB OpenConfig
     Cnc.ReadData(0, @programState, Header#CONFIG_SIZE)
     case programState
       {Header#FRESH_PROGRAM:
-        Com.Str(0, string(11, 13, 7, "Error! programState = FRESH_PROGRAM"))
+        Pst.Str(string(11, 13, 7, "Error! programState = FRESH_PROGRAM"))
         ResetConfig
       Header#ACTIVE_PROGRAM:
-        Com.Str(0, string(11, 13, 7, "Error! Previous session was not properly shutdown."))
+        Pst.Str(string(11, 13, 7, "Error! Previous session was not properly shutdown."))
         ResetConfig           }
       Header#TRANSITIONING_PROGRAM:
-        'Com.Str(0, string(11, 13, "Returning from ", QUOTE))
-        'Com.Str(0, Header.FindString(@programNames, previousProgram))
-        'Com.Tx(0, QUOTE)
+        'Pst.Str(string(11, 13, "Returning from ", QUOTE))
+        'Pst.Str(Header.FindString(@programNames, previousProgram))
+        'Pst.Char(QUOTE)
         previousProgram := Header#DESIGN_INPUT_MAIN
         programState := Header#ACTIVE_PROGRAM
         Cnc.WriteData(0, @programState, Header#CONFIG_SIZE)
       {Header#SHUTDOWN_PROGRAM:
-        Com.Str(0, string(11, 13, "Previous session was successfully shutdown."))
+        Pst.Str(string(11, 13, "Previous session was successfully shutdown."))
         ResetConfig  }
       other:
-        Com.Str(0, string(11, 13, 7, "Error! Configuration File Found But With Wrong programState."))
-        Com.Str(0, string(11, 13, 7))
-        'Com.Str(0, @endText)
-        Com.Str(0, @errorButContinueText)
+        Pst.Str(string(11, 13, 7, "Error! Configuration File Found But With Wrong programState."))
+        Pst.Str(string(11, 13, 7))
+        'Pst.Str(@endText)
+        Pst.Str(@errorButContinueText)
         oledPtr := 0
         oledPtr[1] := 0
         Cnc.SetOled(Header#AXES_READOUT_OLED, @errorButContinueText, @oledPtr, 2)
@@ -1785,9 +1573,9 @@ PUB OpenConfig
         Cnc.WriteData(0, @programState, Header#CONFIG_SIZE)
         waitcnt(clkfreq * 2 + cnt)
   else
-    Com.Str(0, string(11, 13, 7, "Error! Configuration File Not Found"))
-    Com.Str(0, string(11, 13, 7))
-    Com.Str(0, @endText)
+    Pst.Str(string(11, 13, 7, "Error! Configuration File Not Found"))
+    Pst.Str(string(11, 13, 7))
+    Pst.Str(@endText)
     oledPtr := 0
     Cnc.SetOled(Header#AXES_READOUT_OLED, @endText, @oledPtr, 1)
     repeat     
@@ -1820,13 +1608,48 @@ PUB D 'ebugCog
 PUB DHome
 
   L
-  Com.Tx(0, 11)
-  Com.Tx(0, 13)
-  Com.Tx(0, 1)
-  Com.Dec(0, cogid)
-  Com.Tx(0, ":")
-  Com.Tx(0, 32)
+  Pst.Char(11)
+  Pst.Char(13)
+  Pst.Home
+  Pst.Dec(cogid)
+  Pst.Char(":")
+  Pst.Char(32)
 
+PUB TestMath | localIndex, localDelay, previousDelay
+
+''C[i] = C[i-1] - ((2*C[i])/(4*i+1))
+  localDelay := maxDelay
+  Pst.str(string(11, 13, "delay[0] = "))
+  {Pst.Dec(maxDelay / US_001)
+  Pst.str(string(" us = "))}
+  Pst.Dec(localDelay)
+  'Pst.str(string(" ticks"))
+    
+  localIndex := 1
+  
+  repeat
+    previousDelay := localDelay
+    localDelay -= (2 * localDelay) / ((4 * localIndex) + 1)
+    Pst.str(string(11, 13, "delay["))
+    Pst.Dec(localIndex)
+    Pst.str(string("] = "))
+    {Pst.Dec(localDelay / US_001)
+    Pst.str(string(" us = "))  }
+    Pst.Dec(localDelay)
+    'Pst.str(string(" ticks"))
+    Pst.str(string(", fraction of previous = "))
+    result := localDelay * maxDelay / previousDelay
+    Pst.Dec(result)
+    Pst.str(string(" / "))
+    Pst.Dec(maxDelay)
+    ifnot localIndex // pauseInterval
+      Cnc.PressToContinue
+    localIndex++  
+  while localDelay > minDelay
+
+  Pst.str(string(11, 13, 11, 13, "Program Over"))
+  repeat
+                          }
 DAT
 
 pauseInterval           long 40
@@ -1844,7 +1667,7 @@ maxDelay                long 10_000 'US_001 * 20_000
                         byte "MANUAL_POTS_MAIN", 0 } 
                           
 DAT
-
+{
 unitsText               byte "steps", 0
                         byte "turns", 0
                         byte "inches", 0
@@ -1858,7 +1681,7 @@ unitsTxt                byte "steps", 0
 axesText                byte "X_AXIS", 0
                         byte "Y_AXIS", 0
                         byte "Z_AXIS", 0
-                        byte "DESIGN_AXIS", 0
+                        byte "DESIGN_AXIS", 0   }
 
 {machineStateTxt         byte "INIT_STATE", 0
                         byte "DESIGN_INPUT_STATE", 0
@@ -1868,7 +1691,7 @@ axesText                byte "X_AXIS", 0
                         byte "MANUAL_NUNCHUCK_STATE", 0
                         byte "MANUAL_POTS_STATE", 0   }
 
-
+{
 xyzLabels               byte "x = ", 0
 yLabel                  byte "y = ", 0
 zLabel                  byte "z = ", 0
@@ -2004,7 +1827,7 @@ dCodeText               byte "POINT_D", 0
                         byte "PROJECT_NAME_D", 0
                         byte "TOOL_RADIUS_UNITS_D", 0
                         
-commentFromFile         byte 0[MAX_COMMENT_CHARACTERS + 1]
+commentFromFile         byte 0[MAX_COMMENT_CHARACTERS + 1]    }
                                            
 '                        long
 {DAT accelerationTable   'long 0[MAX_ACCEL_TABLE]

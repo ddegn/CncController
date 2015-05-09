@@ -1,330 +1,433 @@
-DAT programName         byte "StoreMotor", 0
+DAT objectName          byte "MotorControlSd", 0
 CON
-{{      
+{{
 
+ 
 }}
-{
-  ******* Private Notes *******
-  Change name from "CncCommonMethods150416a" to "StoreBitmap150416a."
-  16a Successfully saved propBeanie bitmap.
-  16b  splash
-}  
-CON
+DAT
 
-  _clkmode = xtal1 + pll16x                           
-  _xinfreq = 5_000_000
+'cog                     long 0
+command                 long 0
+mailbox                 long 0
 
-  CLK_FREQ = ((_clkmode - xtal1) >> 6) * _xinfreq
-  MS_001   = CLK_FREQ / 1_000
-  US_001   = CLK_FREQ / 1_000_000
+maxDelay                long 80_000 * 5 '80_000 * 50
+minDelay                long 80_000 '80_000
+delayChange             long 800 '8_000
+accelInterval           long 40_000 '' *** This might be a problem.
+accelIntervals          long 0-0
 
-  QUOTE = 34
-  BELL = 7
+address165              long 0-0
+debugActiveDelayS       long 0-0
+debugActiveDelay        long 0-0
+debugDelayTotalS        long 0-0
+debugDelayTotal         long 0-0   
+debugFullStepsF         long 0-0
+debugAddress5           long 0-0
+debugMaxDelay           long 0-0
+debugAddress7           long 0-0
+debugNextHalfTime       long 0-0
+debugAddress9           long 0-0
+debugFastTotal          long 0-0
+debugSlowTotal          long 0-0
+debugScratchTime111     long 0-0
+debugScratchTime        long 0-0
+debugLocationClue       long 0-0
+debugLocationClueF      long 0-0
+debugAccelSteps         long 0-0
+debugDecelSteps         long 0-0
+debugFullSpeedSteps     long 0-0
+debugNextStepTime       long 0-0
+debugAccelStage         long 0-0
+debugStepCountdown      long 0-0 '21
+debug1M                 long 0-0 
+debug2M                 long 0-0 
+debug3M                 long 0-0 
+debug4M                 long 0-0
+debug1MA                long 0-0 
+debug2MA                long 0-0 
+debug3MA                long 0-0 
+debug4MA                long 0-0  
+debug1MF                long 0-0 '30
+debug2MF                long 0-0 
+debug3MF                long 0-0 
+debug4MF                long 0-0  
+debug1MD                long 0-0 
+debug2MD                long 0-0 
+debug3MD                long 0-0 
+debug4MD                long 0-0  
+debugActiveChange       long 0-0 
+debugAddressR           long 0-0 '39
+debugActiveChangeS      long 0-0
+
+'accelMaxIntervals       long 0-0
+
+'debugAddress            long 0-0
+dirPinX                 long Header#DIR_X_PIN
+dirPinY                 long Header#DIR_Y_PIN
+dirPinZ                 long Header#DIR_Z_PIN
+stepMaskX               long 1 << Header#STEP_X_PIN
+stepMaskY               long 1 << Header#STEP_Y_PIN
+stepMaskZ               long 1 << Header#STEP_Z_PIN
   
+'testBuffer              long 0[TEST_BUFFER_SIZE]
+
 OBJ
 
   Header : "HeaderCnc"
-  Pst : "Parallax Serial TerminalDat"
-  Format : "StrFmt"
-  Sd[1]: "SdSmall" 
-  'Spi : "StepperSpi"  
-  Num : "Numbers"
-   
-VAR
+     
+PUB Start(address165_, pasmBufferPtr) '| debugPtr
 
-
-  'long lastRefreshTime, refreshInterval
-  long oledStack
-  long sdErrorNumber, sdErrorString, sdTryCount
-  long filePosition[Header#NUMBER_OF_AXES]
-  long globalMultiplier
-  long oledLabelPtr, oledDataPtr, oledDataQuantity ' keep together and in order
-  
-  long adcData[8]
-  long debugSpi[16]
-  
-  byte sdMountFlag[Header#NUMBER_OF_SD_INSTANCES]
-  byte endFlag
-  byte configData[Header#CONFIG_SIZE]
-  byte sdFlag
-  byte tstr[32]
-  
-DAT
-
-designFileIndex         long -1             
-
-machineState            byte Header#INIT_STATE
-units                   byte Header#MILLIMETER_UNIT 
-delimiter               byte 13, 10, ",", 9, 0
-oledState               byte Header#DEMO_OLED
-
-PUB Main | bitmapSize, fileName, bitmapPtr
-
-  Pst.Start(115200)
-  
-  repeat
-    result := Pst.RxCount
-    Pst.str(string(11, 13, "Press any key to continue starting program."))
-    waitcnt(clkfreq / 2 + cnt)
-  until result
-  Pst.RxFlush
-  
-  sdFlag := Header#INITIALIZING_SD
-  
-  Sd.fatEngineStart(Header#DOPIN, Header#ClkPIN, Header#DIPIN, Header#CSPIN, {
-  } Header#WP_SD_PIN, Header#CD_SD_PIN, Header#RTC_PIN_1, Header#RTC_PIN_2, Header#RTC_PIN_3)
-  
-  
-  Pst.str(string(11, 13, "SD Card Driver Started"))
-
-  fileName := @sdFileName          '' Change these two lines to match names of data
-  bitmapPtr := @entry
-  
-  bitmapSize := @afterData - bitmapPtr
-        
-  OpenOutputFileW(0, fileName)
-  Sd.writeData(bitmapPtr, bitmapSize)
-  Sd.closeFile  
-  result := CompareData(fileName, bitmapPtr, bitmapSize, 1)
-  Pst.str(string(11, 13, "Data size = "))
-  Pst.dec(bitmapSize)
-  Pst.str(string(" bytes."))      
-  if result
-    Pst.str(string(11, 13, "Error, data in file does not match data in RAM."))
-    Pst.str(string(11, 13, "There were "))
-    Pst.dec(result)
-    Pst.str(string("differences found between the two data sets."))
-  else
-    Pst.str(string(11, 13, "Success, the data in the file matches the data in RAM."))   
-  Pst.str(string(11, 13, "End of program."))
-  repeat
-      
-PUB CompareData(fileName, localPtr, bitmapSize, displayFlag) | localByte, rowCount, byteCount
-
-  rowCount := 0
-  byteCount := 0
-  
-  Pst.Str(string(11, 13, "Comparing RAM with File."))
-
-  Pst.Str(string(11, 13, "RAM address = $"))
-  Pst.Hex(localPtr, 4)
-
-  Pst.Str(string(11, 13, "File name = "))
-  Pst.Str(fileName) 
-
-  Pst.Str(string(11, 13, "Bytes to compare = $"))
-  Pst.Hex(bitmapSize, 4)
-  Pst.Str(string(11, 13))
-   
-  OpenFileToRead(0, fileName)
-  repeat bitmapSize
-  
-    ifnot rowCount++ // 8
-      if displayFlag
-
-        Pst.Str(string(11, 13, "<$"))
-        Pst.Hex(localPtr, 4)
-        Pst.Str(string("&$"))
-        Pst.Hex(byteCount, 4)
-        Pst.Str(string(">"))
-
-    localByte := Sd.readByte
-    if displayFlag
-      Pst.Str(string("|$"))
-      Pst.Hex(byte[localPtr], 2)
-    if byte[localPtr] == localByte
-      if displayFlag
-        Pst.Str(string("==$"))
-    else
-      if displayFlag
-        Pst.Str(string(7, "<>$"))
-      result++
-    if displayFlag
-      Pst.Hex(localByte, 2)  
-    localPtr++
-    byteCount++
-    
-  Pst.Str(string(11, 13, "The compare method found "))
-  Pst.Dec(result)
-  Pst.Str(string(" unmatched bytes."))
-
-  if result
-    Pst.Str(string(11, 13, BELL, " Failure!!! ", BELL))
-  else
-    Pst.Str(string(" Success!!! "))
-  
-PRI OpenFileToRead(sdInstance, basePtr)
-    
-  result := MountSd(sdInstance)
-  if result == 1
-    Pst.str(string(11, 13, "Error in program.  Problem mounting SD card."))
-    waitcnt(clkfreq * 2 + cnt)
-    result := Header#READ_FILE_ERROR_OTHER
-    return
-  elseif result
-    Pst.str(string(11, 13, "MountSd returned = "))
-    Pst.str(result)
-    waitcnt(clkfreq * 2 + cnt)
-
-  Pst.str(string(11, 13, "Looking for file ", 34))
-  Pst.str(basePtr)
-  Pst.char(34)
-  sdErrorString := \Sd[sdInstance].openFile(basePtr, "R")
-  if strcomp(sdErrorString, basePtr)
-    Pst.str(string(11, 13, "File ", 34))
-    Pst.str(basePtr)
-    Pst.str(string(34, " found."))
-    result := Header#READ_FILE_SUCCESS
-  else
-    Pst.str(string(11, 13, "File ", 34))
-    Pst.str(basePtr)
-    Pst.str(string(34, " not found."))
-    Pst.str(string(11, 13, "sdErrorString = "))
-    Pst.dec(sdErrorString)
-    Pst.str(string(11, 13, "sdErrorString ", 34))
-    Pst.str(sdErrorString)
-    Pst.char(34)
-    UnmountSd(sdInstance)
-   
-    result := Header#FILE_NOT_FOUND
-
-PUB OpenOutputFileW(sdInstance, localPtr)
-
-  ifnot sdMountFlag[sdInstance] 
-    Pst.str(string(11, 13, "Calling MountSd."))
-    MountSd(sdInstance)
-    
-
-  Pst.str(string(11, 13, "Attempting to create file ", 34))
-  Pst.str(localPtr)
-  Pst.char(34)
-
-  repeat
-    sdErrorString := \Sd[sdInstance].newFile(localPtr)
-    sdErrorNumber :=  Sd[sdInstance].partitionError ' Returns zero if no error occurred.
-       
-    if(sdErrorNumber) ' Try to handle the "entry_already_exist" error.
-      if(sdErrorNumber == Sd#Entry_Already_Exist)
-
-        Sd[sdInstance].deleteEntry(localPtr)
-        result := 0
-      else
+  address165 := address165_
  
-        Pst.str(string(11, 13, "Create File Errror = "))
-        Pst.dec(sdErrorNumber)
-        
-        waitcnt(clkfreq * 2 + cnt)
-        result := -1
+  'testBufferPtr := @testBuffer
+ 
+  'debugPtr := @debugActiveDelayS
+
+  'accelIntervals := ComputeAccelIntervals(maxDelay, minDelay, delayChange, accelInterval)
+  
+ { repeat result from 0 to 40 'Header#MAX_DEBUG_SPI_INDEX
+    debugActiveDelayS[result] := debugPtr
+    debugPtr += 4
+       }
+  cognew(pasmBufferPtr, @command)
+
+  waitcnt(clkfreq / 100 + cnt)
+  
+  SetMotorParameters(maxDelay, minDelay, delayChange, accelInterval)
+
+PUB SetCommand(cmd)
+
+  command := cmd                '' Write command 
+  repeat while command          '' Wait for command to be cleared, signifying receipt
+
+'PUB GetPasmArea
+'' To reuse memory if desired.
+
+  'result := @entry 
+
+PUB SetMaxDelay(localMax)
+
+  SetMotorParameters(localMax, minDelay, delayChange, accelInterval)
+  
+PUB SetMinDelay(localMin)
+
+  SetMotorParameters(maxDelay, localMin, delayChange, accelInterval)
+  
+PUB SetDelayChange(localChange)
+
+  SetMotorParameters(maxDelay, minDelay, localChange, accelInterval)
+  
+PUB SetMotorParameters(localMax, localMin, localChange, localAccelInterval)
+
+  longmove(@maxDelay, @localMax, 4)
+
+  mailbox := @result
+  result := @maxDelay
+  'accelMaxIntervals := ComputeMaxAccelIntervals(localMax, localMin, localChange)
+  accelIntervals := ComputeAccelIntervals(localMax, localMin, localChange, localAccelInterval)
+  SetCommand(Header#NEW_PARAMETERS_MOTOR)
+
+{PRI ComputeMaxAccelIntervals(localMax, localMin, localChange)
+
+  result := localMax - localMin
+  result += localChange - 1     ' make sure divide doesn't truncate value at all
+  result /= localChange
+}  
+  ''Pst.Str(string(11, 13, "accelMaxIntervals = "))
+  ''Pst.Dec(result)
+  
+PRI ComputeAccelIntervals(localMax, localMin, localChange, localAccelInterval) | nextAccel, {
+} nextStep
+
+  {{Pst.Str(string(11, 13, "ComputeAccelIntervals("))
+  Pst.Dec(localMax)
+  Pst.Str(string(", "))
+  Pst.Dec(localMin)
+  Pst.Str(string(", "))
+  Pst.Dec(localChange)
+  Pst.Str(string(", "))
+  Pst.Dec(localAccelInterval)
+  Pst.Str(string("), accelIntervals = "))
+  Pst.Dec(accelIntervals) }}
+  
+  longfill(@nextAccel, 0, 2)
+
+  repeat while localMax > localMin
+    nextAccel += localAccelInterval
+    {{Pst.Str(string(11, 13, "localMax = "))
+    Pst.Dec(localMax)
+    Pst.Str(string(", Min = "))
+    Pst.Dec(localMin)}}
+    
+    repeat while nextStep < nextAccel
+      result++
+      nextStep += localMax
+      {{Pst.Str(string(", intervals = "))
+      Pst.Dec(result)
+      Pst.Str(string(", nextStep = "))
+      Pst.Dec(nextStep)}}
+    localMax -= localChange  
+  
+  ''Pst.Str(string(11, 13, "accelIntervals = "))
+  ''Pst.Dec(result)
+  
+PUB MoveSingle(localAxis, localDistance) | spinScratch
+
+  {{Pst.Str(string(11, 13, "MoveSingle("))
+  Pst.Dec(localAxis)
+  Pst.Str(string(", "))
+  Pst.Dec(localDistance)
+  Pst.Str(string("), accelIntervals = "))
+  Pst.Dec(accelIntervals)  }}
+  
+  longfill(@debugActiveDelayS, 0, 40)
+  
+  localAxis := stepMaskX[localAxis]
+  if localDistance < 0
+    dira[dirPinX[localAxis]] := 0
+    ||localDistance
+  else
+    dira[dirPinX[localAxis]] := 1
+      
+  mailbox := @result
+  ''Pst.Str(string(11, 13, "localAxis (mask) "))
+  'Cnc.ReadableBin(localAxis, 32)
+  
+  'Cnc.PressToContinue
+   
+  'SetCommand(Header#SINGLE_MOTOR)
+  command := Header#SINGLE_MOTOR
+  repeat 'while command          '' Wait for command to be cleared, signifying receipt
+    {{Pst.Str(string(11, 13, "location = ")) ' watch progress
+    Pst.Dec(debugLocationClueF)
+    Pst.Str(string(", ")) 
+    Pst.Dec(debugLocationClue)
+    Pst.Str(string(", fastTotal = ")) 
+    Pst.Dec(debugFastTotal)
+    Pst.Str(string(", activeDelay = ")) 
+    Pst.Dec(debugActiveDelay)
+    Pst.Str(string(" or ")) 
+    Pst.Dec(debugActiveDelay / 80_000)
+    Pst.Str(string(" ms, delayTotal = ")) 
+    Pst.Dec(debugDelayTotal)
+    Pst.Str(string(" or ")) 
+    Pst.Dec(debugDelayTotal / 80_000)
+    Pst.Str(string(" ms  ")) 
+    Pst.Dec(debugAccelSteps)
+    
+    Pst.Str(string(11, 13, "maxDelayCog = ")) 
+    Pst.Dec(debugMaxDelay)
+    Pst.Str(string(", PASM scratchTime = ")) 
+    Pst.Dec(debugScratchTime111)
+    Pst.Str(string(" or ")) 
+    Pst.Dec(debugScratchTime111 / 80_000)
+    Pst.Str(string(", scratchTime (accel) = ")) 
+    Pst.Dec(debugScratchTime)
+    Pst.Str(string(11, 13, "Spin scratchTime = ")) 
+    spinScratch := debugNextHalfTime - cnt
+    Pst.Dec(spinScratch)
+    Pst.Str(string(" or ")) 
+    Pst.Dec(spinScratch / 80_000)
+    Pst.Str(string(" ms")) 
+       
+    Pst.Str(string(11, 13, "accelStepsF = ")) 
+    Pst.Dec(debugAccelSteps)   
+    Pst.Str(string(", fullStepsF = ")) 
+    Pst.Dec(debugFullSpeedSteps)   
+    Pst.Str(string(", decelStepsF = ")) 
+    Pst.Dec(debugDecelSteps)   
+    Pst.Str(string(", a+f+d = ")) 
+    Pst.Dec(debugAccelSteps + debugFullSpeedSteps + debugDecelSteps)   
+    Pst.Str(string(", localDistance = ")) 
+    Pst.Dec(localDistance)   
+
+    Pst.Str(string(11, 13, "debugHalfTime = ")) 
+    Pst.Dec(debugNextHalfTime)   
+    Pst.Str(string(", nextStepTime = ")) 
+    Pst.Dec(debugNextStepTime)   
+    Pst.Str(string(", next - half = ")) 
+    Pst.Dec(debugNextStepTime - debugNextHalfTime)   
+    }}
+    
+                        
+  while command and debugLocationClue <> 999        
+  ''Pst.Str(string(11, 13, "full speed steps = "))
+ '' Pst.Dec(result)
+  
+   
+PUB MoveLine(longAxis, shortAxis, longDistance, shortDistance) | {
+} maxDelayS, minDelayS, delayChangeS, spinScratch, originalAxes[2]
+
+  maxDelayS := Header.TtaMethod(||longDistance, maxDelay, ||shortDistance)
+  minDelayS := Header.TtaMethod(||longDistance, minDelay, ||shortDistance)
+  delayChangeS := Header.TtaMethod(||longDistance, delayChange, ||shortDistance)
+  longmove(@originalAxes, @longAxis, 2)
+  longfill(@debugActiveDelayS, 0, 40)
+  
+  {{Pst.Str(string(11, 13, "MoveLine("))
+  Pst.Dec(longAxis)
+  Pst.Str(string(", "))
+  Pst.Dec(shortAxis)
+  Pst.Str(string(", "))
+  Pst.Dec(longDistance)
+  Pst.Str(string(", "))
+  Pst.Dec(shortDistance)
+  Pst.Str(string("), accelIntervals = "))
+  Pst.Dec(accelIntervals)
+  Pst.Str(string("), accelMaxIntervals = "))
+  Pst.Dec(accelMaxIntervals) 
+
+  
+  
+  Pst.Str(string(11, 13, "startDelay (long) = "))
+  Pst.Dec(maxDelay)
+  Pst.Str(string(", (short) = "))
+  Pst.Dec(maxDelayS)
+  Pst.Str(string(11, 13, "minDelay (long) = "))
+  Pst.Dec(minDelay)
+  Pst.Str(string(", (short) = "))
+  Pst.Dec(minDelayS)
+  Pst.Str(string(11, 13, "delayChange (long) = "))
+  Pst.Dec(delayChange)
+  Pst.Str(string(", (short) = "))
+  Pst.Dec(delayChangeS)  }}
+
+  repeat result from 0 to 1
+    longAxis[result] := stepMaskX[originalAxes[result]]
+    if longDistance[result] < 0
+      dira[dirPinX[originalAxes[result]]] := 0
+      ||longDistance[result]
     else
-      'sdFlag := NEW_LOG_CREATED_SD
-      'repeat until not lockset(debugLockID) 
-      Pst.str(string(11, 13, "Creating file ", 34))
-      Pst.str(localPtr)
-      Pst.str(string(34, "."))     
-      'waitcnt(clkfreq / 4 + cnt)  
-      Sd[sdInstance].openFile(localPtr, "W")
-      result := 1
-  until result 
+      dira[dirPinX[originalAxes[result]]] := 1
+   {{ Pst.Str(string(11, 13))
+    {Pst.Str(Header.FindString(Cnc.GetAxisText, originalAxes[result]))} 
+    Pst.Str(string(" (mask)["))
+    Pst.Dec(originalAxes[result])
+    Pst.Str(string("] = "))  }}
+    'Cnc.ReadableBin(longAxis[result], 32)  
 
-PUB MountSd(sdInstance)
-'' Returns 1 is no SD card is found.
-
-  Pst.str(string(11, 13, "MountSd Method"))
-  if sdMountFlag[sdInstance]
-    result := string("SD Card Already Mounted")
-    return  
-  sdErrorNumber := Sd[sdInstance].mountPartition(0)
-  Pst.str(string(11, 13, "After mount attempt.")) 
-  if sdErrorNumber
-    sdFlag := Header#NOT_FOUND_SD
-    result := 1
-    Pst.str(string(11, 13, "Error Mounting SD Card #"))
-    Pst.dec(sdErrorNumber)
-    
-    if sdErrorNumber == -1
-      Pst.str(string(11, 13, "The SD card was not properly unmounted after its last use."))
-      Pst.str(string(11, 13, "Continuing with program."))
-      sdFlag := Header#INITIALIZING_SD
-      result := 0
-
-  if result <> 1
-    sdMountFlag[sdInstance] := 1
-
-PUB UnmountSd(sdInstance)
-
-  if sdMountFlag[sdInstance] == 0
-    Pst.str(string(11, 13, "Partition not currently mounted."))
-    return
+  'Cnc.PressToContinue
   
-  Pst.str(string(11, 13, "Unmounting Partition"))
-  sdErrorNumber := Sd[sdInstance].unmountPartition
-  Pst.str(string(11, 13, "sdErrorNumber = "))
-  Pst.dec(sdErrorNumber)
-  'outa[_GreenLedPin]~~
-  'outa[_RedLedPin]~
-  sdMountFlag[sdInstance] := 0
+  mailbox := @result
 
-PUB PauseForInput
-
-  Pst.Str(string(11, 13, "Press any key to continue."))
-  result := Pst.CharIn
-
-PRI SafeTx(localCharacter)
-'' Debug lock should be set prior to calling this method.
-
-  if (localCharacter > 32 and localCharacter < 127)
-    Pst.Char(localCharacter)    
-  else
-    Pst.Char(60)
-    Pst.Char(36) 
-    Pst.Hex(localCharacter, 2)
-    Pst.Char(62)
-
-PUB PressToPause
-
-  result := Pst.RxCount
-  if result
-    Pst.str(string(11, 13, "Paused."))
-    Pst.RxFlush
-    PressToContinue
+  'SetCommand(Header#DUAL_MOTOR)
+  command := Header#DUAL_MOTOR
+  repeat 'while command          '' Wait for command to be cleared, signifying receipt
+    {{Pst.Str(string(11, 13, "location = ")) ' watch progress
+    Pst.Dec(debugLocationClueF)
+    Pst.Str(string(", ")) 
+    Pst.Dec(debugLocationClue)
+    Pst.Str(string(", fastTotal = ")) 
+    Pst.Dec(debugFastTotal)
+    Pst.Str(string(", activeDelay = ")) 
+    Pst.Dec(debugActiveDelay)
+    Pst.Str(string(" or ")) 
+    Pst.Dec(debugActiveDelay / 80_000)
+    Pst.Str(string(" ms, delayTotal = ")) 
+    Pst.Dec(debugDelayTotal)
+    Pst.Str(string(" or ")) 
+    Pst.Dec(debugDelayTotal / 80_000)
+    Pst.Str(string(" ms  ")) 
+    Pst.Dec(debugAccelSteps)
     
-PUB PressToContinue
-  
-  Pst.str(string(11, 13, "Press to continue."))
-  repeat
-    result := Pst.RxCount
-  until result
-  Pst.RxFlush
-
-PUB PressToContinueOrClose(closeCharacter)
-'StoreBitmap150416a
-
-  if closeCharacter <> -1
-    Pst.str(string(11, 13, "Press ", QUOTE))
-    Pst.Char(closeCharacter)
-    Pst.str(string(QUOTE, " to close or any other key to continue."))
-    result := Pst.CharIn
-  else
-    result := -1  
-  if result == closeCharacter
-    Pst.str(string(11, 13, "Closing all files."))
-    'Pst.str(string(11, 13, "End of program.")) 
+    Pst.Str(string(11, 13, "location = ")) 
+    Pst.Dec(debugLocationClueF)
+    Pst.Str(string(", ")) 
+    Pst.Dec(debugLocationClue)
+    Pst.Str(string(", slowTotal = ")) 
+    Pst.Dec(debugSlowTotal)
+    Pst.Str(string(", activeDelayS = ")) 
+    Pst.Dec(debugActiveDelayS)
+    Pst.Str(string(" or ")) 
+    Pst.Dec(debugActiveDelayS / 80_000)
+    Pst.Str(string(" ms, delayTotal = ")) 
+    Pst.Dec(debugDelayTotalS)
+    Pst.Str(string(" or ")) 
+    Pst.Dec(debugDelayTotalS / 80_000)
+    Pst.Str(string(" ms  ")) 
+    'Pst.Dec(debugAccelSteps)
+    Pst.Str(string(11, 13, "activeChange = ")) 
+    Pst.Dec(debugActiveChange)
+    Pst.Str(string(", ")) 
+    Pst.Dec(debugActiveChangeS)
    
-    Sd[0].closeFile
-   
-    UnmountSd(result)
-    UnmountSd(Header#DESIGN_AXIS)
-    PressToContinue
-  else
-    result := 0
+    
+    Pst.Str(string(11, 13, "maxDelayCog = ")) 
+    Pst.Dec(debugMaxDelay)
+    Pst.Str(string(", PASM scratchTime = ")) 
+    Pst.Dec(debugScratchTime111)
+    Pst.Str(string(" or ")) 
+    Pst.Dec(debugScratchTime111 / 80_000)
+    Pst.Str(string(", scratchTime (accel) = ")) 
+    Pst.Dec(debugScratchTime)
+    Pst.Str(string(11, 13, "Spin scratchTime = ")) 
+    spinScratch := debugNextHalfTime - cnt
+    Pst.Dec(spinScratch)
+    Pst.Str(string(" or "))
+    Pst.Dec(spinScratch / 80_000)
+    Pst.Str(string(" ms"))
+       
+    Pst.Str(string(11, 13, "accelStepsF = ")) 
+    Pst.Dec(debugAccelSteps)   
+    Pst.Str(string(", fullStepsF = "))
+    Pst.Dec(debugFullSpeedSteps)   
+    Pst.Str(string(", decelStepsF = ")) 
+    Pst.Dec(debugDecelSteps)   
+    Pst.Str(string(", a+f+d = "))
+    Pst.Dec(debugAccelSteps + debugFullSpeedSteps + debugDecelSteps)   
+    Pst.Str(string(", longDistance = "))
+    Pst.Dec(longDistance)   
+    Pst.Str(string(", shortDistance = ")) 
+    Pst.Dec(shortDistance)   
 
-DAT
+    Pst.Str(string(11, 13, "accelStage = ")) 
+    Pst.Dec(debugAccelStage)   
+    Pst.Str(string(", stepCountdown = ")) 
+    Pst.Dec(debugStepCountdown)   
+    
+    Pst.Str(string(11, 13, "fast low con1M = ")) 
+    Pst.Dec(debug1M)   
+    Pst.Str(string(", slow low con2M = ")) 
+    Pst.Dec(debug2M)   
+    Pst.Str(string(", slow high con3M = ")) 
+    Pst.Dec(debug3M)   
+    Pst.Str(string(", fast high con4M = ")) 
+    Pst.Dec(debug4M)   
+    Pst.Str(string(11, 13, "Accel = ")) 
+    Pst.Dec(debug1MA)   
+    Pst.Str(string(", ")) 
+    Pst.Dec(debug2MA)   
+    Pst.Str(string(", ")) 
+    Pst.Dec(debug3MA)   
+    Pst.Str(string(", "))
+    Pst.Dec(debug4MA)   
+    Pst.Str(string(11, 13, "Full = ")) 
+    Pst.Dec(debug1MF)   
+    Pst.Str(string(", ")) 
+    Pst.Dec(debug2MF)   
+    Pst.Str(string(", ")) 
+    Pst.Dec(debug3MF)   
+    Pst.Str(string(", "))
+    Pst.Dec(debug4MF)   
+    Pst.Str(string(11, 13, "Decel = ")) 
+    Pst.Dec(debug1MD)   
+    Pst.Str(string(", ")) 
+    Pst.Dec(debug2MD)   
+    Pst.Str(string(", ")) 
+    Pst.Dec(debug3MD)   
+    Pst.Str(string(", ")) 
+    Pst.Dec(debug4MD)   
 
-sdFileName              byte "MOTORCNC.DAT", 0
-
-'bitmap
-                  
-DAT                     org
+    Pst.Str(string(11, 13, "debugHalfTime = ")) 
+    Pst.Dec(debugNextHalfTime)   
+    Pst.Str(string(", nextStepTime = ")) 
+    Pst.Dec(debugNextStepTime)   
+    Pst.Str(string(", next - half = ")) 
+    Pst.Dec(debugNextStepTime - debugNextHalfTime)}}
+                        
+  while command and debugLocationClue <> 999
+    
+DAT                 {    org
 '------------------------------------------------------------------------------
 entry                   or      dira, stepMask
 maxDelayCog             andn    outa, stepMask
@@ -1152,7 +1255,6 @@ accelStage              res 1
 'negativeChange          res 1
 delayChangeCogS         res 1
 stepCountdown           res 1
-                        fit                                                                                                                                                                                     
-afterData     byte 255
+                        fit   }
 
-                                                                                                                                                              
+DAT
