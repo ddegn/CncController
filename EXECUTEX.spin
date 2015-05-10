@@ -157,7 +157,7 @@ PUB Setup'(parameter0, parameter1)
 
   'repeat
   
-  OpenConfig
+  ''OpenConfig
   repeat result from 0 to 2
     Cnc.ResetDrv8711(result)
     Com.Str(0, string(11, 13, "Reset axis #"))
@@ -473,7 +473,7 @@ PUB CheckMenu(tempValue)
   ifnot result
     Cnc.InvertOff
     case tempValue
-      1, "s", "N": 
+      1, "s", "S": 
         executeState := SELECT_TO_EXECUTE
       '2, "o", "O":
       '  executeState := ACTIVE_EXECUTE
@@ -486,10 +486,10 @@ PUB CheckMenu(tempValue)
     abort
 
   Cnc.ReadAdc
-  result := GetJoystick(Header#JOY_Y_ADC, -Header#DEFAULT_DEADBAND * 4)
+  result := GetJoystick(Header#JOY_Y_ADC, -Header#DEFAULT_DEADBAND * 2)
   Com.Str(0, string(11, 13, "result Y ="))               
   Com.Dec(0, result)
-  result += GetJoystick(Header#JOY_Z_ADC, Header#DEFAULT_DEADBAND * 4)
+  result += GetJoystick(Header#JOY_Z_ADC, Header#DEFAULT_DEADBAND * 2)
   Com.Str(0, string(11, 13, "result Y + Z ="))               
   Com.Dec(0, result)
   if result > 0 and highlightedLine < oledMenuHighlightRange[1]
@@ -1003,7 +1003,9 @@ PUB GetStepsFromUnits(localUnits, localValue, localMultiplier)
   Com.Dec(0, localValue)
   Com.Str(0, string(", "))
   Com.Dec(0, localMultiplier)
-  Com.Str(0, string(") result = "))
+  Com.Str(0, string(") microsteps = "))
+  Com.Dec(0, microsteps)
+  Com.Str(0, string(", result = "))
   
   case localUnits
     Header#STEP_UNIT:
@@ -1022,7 +1024,7 @@ PUB GetStepsFromUnits(localUnits, localValue, localMultiplier)
       result /= localMultiplier
       result /= 5
       
-  result *= microsteps
+  'result *= microsteps
   
   Com.Dec(0, result)
       
