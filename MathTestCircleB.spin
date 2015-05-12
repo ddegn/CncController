@@ -1,12 +1,11 @@
-DAT programName         byte "MathTestCircle", 0
+DAT programName         byte "MathTestCircleB", 0
 CON
-{  Design Execute
-  This sub program reads the design file from the SD card and executes the instructions.
+{
+  By Duane Degn
+  11 May 2015 
+  This program tests an algorithm for generating appropriate delays to stepper motors.
+  The resulting motion should produce an eighth of a circle.
 
-  ******* Private Notes *******
- 
-  Change name from "DESIGNIN" to "EXECUTE_."
-  Change name from "MathTest" to "MathTestCircle"
 }  
 CON
 
@@ -17,75 +16,25 @@ CON
   MS_001   = CLK_FREQ / 1_000
   US_001   = CLK_FREQ / 1_000_000
 
-  QUOTE = 34
+CON
 
-  'executeState enumeration
-  #0, INIT_EXECUTE, SELECT_TO_EXECUTE, ACTIVE_EXECUTE, RETURN_FROM_EXECUTE
-            
+  SCALED_MULTIPLIER = 1000
+  X_AXIS = 0
+  Y_AXIS = 1
+  
 VAR
-
-  'long stack[64]
-  'long qq
-  'long commandSpi
-  'long debugSpi[16]
-  'long shiftRegisterOutput, shiftRegisterInput ' read only from Spin
-  'long adcData[8]
-
-  'long lastRefreshTime, refreshInterval
-  'long sdErrorNumber, sdErrorString, sdTryCount
-  'long filePosition[Header#NUMBER_OF_AXES]
-  'long globalMultiplier
-  'long timer
-  'long topX, topY, topZ
-  long oledPtr[Header#MAX_OLED_DATA_LINES]
-  long adcPtr, buttonMask
-  long configPtr', filePosition[4]
-  long globalMultiplier, fileNamePtr
-  long fileIdNumber[Header#MAX_DATA_FILES]
-  long dataFileCounter, highlightedFile
+  long axisDelay[2], xIndex, yIndex, radius, xSquared, ySquared
+  long rSquared, fastAxis, slowAxis, previousY
+  long xAtNextY, nextY, nextYSquared
+  long fastStepsPerSlow, now, lastStep[2]
+  long fullSpeedSteps[2], decelSteps[2]
+  long accelPhase, lastAccel[2], activeAccel[2]
+  long stepState[2], otherAxis[2], lastHalfStep[2], lastAccelCnt
   
-  byte debugLock, spiLock
-  'byte tstr[32]
-
-  'byte sdMountFlag[Header#NUMBER_OF_SD_INSTANCES]
-  byte endFlag
-  'byte configData[Header#CONFIG_SIZE]
-  byte sdFlag, highlightedLine
-  byte commentIndex, newCommentFlag
-  byte codeType, codeValue, expectedChar
-  byte sdProgramName[Header#MAX_NAME_SIZE + 1]
-  byte downFlag, activeFile
-  
-DAT
-
-designFileIndex         long -1
-lowerZAmount            long Header#DEFAULT_Z_DISTANCE
-
-'microStepMultiplier     long 1
-'machineState            byte Header#INIT_STATE
-stepPin                 byte Header#STEP_X_PIN, Header#STEP_Y_PIN, Header#STEP_Z_PIN
-directionPin            byte Header#DIR_X_PIN, Header#DIR_Y_PIN, Header#DIR_Z_PIN
-units                   byte Header#MILLIMETER_UNIT 
-delimiter               byte 13, 10, ",", 9, 0
-executeState            byte INIT_EXECUTE
-
-programState            byte Header#FRESH_PROGRAM
-microsteps              byte Header#DEFAULT_MICROSTEPS
-machineState            byte Header#DEFAULT_MACHINE_STATE
-previousProgram         byte Header#INIT_MAIN
-homedFlag               byte Header#UNKNOWN_POSITION, 0[3]                          
-positionX               long 0 '$80_00_00_00
-positionY               long 0 '$80_00_00_00
-positionZ               long 0 '$80_00_00_00
- 
 OBJ
 
-  Header : "HeaderCnc"
   Pst : "Parallax Serial TerminalDat"
   Format : "StrFmt"
-  'Sd[1]: "SdSmall" 
-  Cnc : "CncCommonMethods"
-  'Motor : "MotorControl"
    
 PUB Setup
 
@@ -98,99 +47,23 @@ PUB Setup
   until result
   Pst.RxFlush
 
-  TestMath 'TestLoop
+  TestMath 
 
-PUB PressToContinue
-  
-  Pst.str(string(11, 13, "Press to continue."))
-  repeat
-    result := Pst.RxCount
-  until result
-  Pst.RxFlush
-
-PUB TtaMethod(N, X, localD)   ' return X*N/D where all numbers and result are positive =<2^31
-  return (N / localD * X) + (binNormal(N//localD, localD, 31) ** (X*2))
-
-PUB BinNormal (y, x, b) : f                  ' calculate f = y/x * 2^b
-' b is number of bits
-' enter with y,x: {x > y, x < 2^31, y <= 2^31}
-' exit with f: f/(2^b) =<  y/x =< (f+1) / (2^b)
-' that is, f / 2^b is the closest appoximation to the original fraction for that b.
-  repeat b
-    y <<= 1
-    f <<= 1
-    if y => x    '
-      y -= x
-      f++
-  if y << 1 => x    ' Round off. In some cases better without.
-      f++
-
-PUB StartFine(fractionGuess)
-
-  result := (fractionGuess + (fractionGuess >> 1)) >> 1
-  
-PUB NextGuess(fractionGuess, previousGuess)
-
-  result := (fractionGuess + previousGuess) >> 1
-  
-PUB DecPoint(value, decimalPlaces) | localBuffer[4]
-
-  result := Format.FDec(@localBuffer, value, 6, decimalPlaces)
-  byte[result] := 0
-  Pst.str(@localBuffer)
-  
-CON
-
-  SCALED_MULTIPLIER = 1000
-  'MAX_DELAY = MS_001 * 20
-  'MIN_DELAY = Header#MIN_DELAY
-  'ACCELERATION_INTERVAL = MS_001 * 100
-  'DELAY_CHANGE = MS_001 
-  X_AXIS = Header#X_AXIS
-  Y_AXIS = Header#Y_AXIS
-  SCALED_TAU = round(2.0 * pi * float(SCALED_MULTIPLIER))
-  SCALED_TAU_OVER_8 = round(pi * float(SCALED_MULTIPLIER) / 4.0)
-  SCALED_TAU_OVER_4 = round(pi * float(SCALED_MULTIPLIER) / 2.0)
-  SCALED_TAU_OVER_2 = round(pi * float(SCALED_MULTIPLIER))
-  SCALED_ROOT_2 = round(^^2.0 * float(SCALED_MULTIPLIER))
-  
-DAT
-
-'pauseInterval           long 40
-minDelay                long 100 * MS_001, 0-0
-maxDelay                long 250 * MS_001, 0-0 
-axisDeltaDelay          long 20 * MS_001, 0-0
-defaultDeltaDelay       long 20 * MS_001, 0-0
-timesToA                long 132
-accelerationInterval    long 300 * MS_001   
-
-VAR
-  long axisDelay[2], previousDelay[2], delayTotal[2], {
-} xIndex, yIndex, radius, xSquared, ySquared, {
-} rSquared, fastAxis, slowAxis, motorIndex, previousY, {
-} xAtNextY, nextY, nextYSquared, fastStepsPerSlow, now, lastStep[2]
-  'long accelSteps[2]
-  long fullSpeedSteps[2], decelSteps[2]
-  long accelPhase, lastAccel[2], activeAccel[2]
-  long stepState[2], otherAxis[2], lastHalfStep[2], lastAccelCnt
-  
 PUB TestMath
-'' There's a problem here with when the fast and slow axes switch.
 '' y = ^^((r * r) - (x * x))
-''
+'' This method only works for 1/8 of a circle.
   
-  fastAxis := Header#X_AXIS
-  slowAxis := Header#Y_AXIS
+  fastAxis := X_AXIS
+  slowAxis := Y_AXIS
   otherAxis[fastAxis] := slowAxis
   otherAxis[slowAxis] := fastAxis
   
-  axisDelay[fastAxis] := maxDelay 'MAX_DELAY
+  axisDelay[fastAxis] := maxDelay
   axisDeltaDelay[fastAxis] := -defaultDeltaDelay
      
-  radius := 400 '1600
+  radius := 400 
   rSquared := radius * radius
 
-  'radius * SCALED_MULTIPLIER / SCALED_ROOT_2
   decelSteps[fastAxis] := radius ' total steps (reached at end of decel phase)
   
   timesToA := ComputeAccelIntervals(axisDelay[fastAxis], minDelay, {
@@ -255,40 +128,7 @@ PUB TestMath
   Pst.Dec(yIndex)
   Pst.str(string(11, 13, "Done! Program Over"))
   repeat
-        
-{  repeat 'xIndex from 0 to 11
-    xIndex++
-    xSquared := xIndex * xIndex
-    ySquared := rSquared - xSquared
-    yIndex := ^^ySquared
-    Pst.str(string(11, 13, "x = "))
-    Pst.Dec(xIndex)
-    Pst.str(string(", x^2 = "))
-    Pst.Dec(xSquared)
-    Pst.str(string(", y = "))
-    Pst.Dec(yIndex)
-    
-  while xSquared < ySquared
 
-  Pst.str(string(11, 13, "----------------------------"))
-  
-  repeat 'yIndex from 0 to 8
-    yIndex--
-    ySquared := yIndex * yIndex
-    xSquared := rSquared - ySquared
-    xIndex := ^^xSquared
-    Pst.str(string(11, 13, "x = "))
-    Pst.Dec(xIndex)
-    Pst.str(string(", x^2 = "))
-    Pst.Dec(xSquared)
-    Pst.str(string(", y = "))
-    Pst.Dec(yIndex)
-  while yIndex > 0
-
-  Pst.str(string(11, 13, "----------------------------"))
-  
-  repeat
-          }
 PUB ComputeNextHalfStep(localAxis)
 
   if stepState[localAxis]
@@ -359,11 +199,7 @@ PUB ComputeNextFullStep(localAxis)
     ComputeNextY
     if xIndex == yIndex
       Pst.str(string(11, 13, "X Equals Y *************************"))
-      'Cnc.PressToContinue
-  {if localAxis == slowAxis
-    ComputeNextSlowStep(localAxis)
-    return }
-    
+
   if accelPhase == 0
     if xIndex[localAxis] > timesToA
       Pst.str(string(11, 13, "Full Speed Phase ********************"))
@@ -411,15 +247,11 @@ PUB ComputeNextY
   Pst.str(string(11, 13, "axisDeltaDelay[slowAxis] = "))
   Pst.Dec(axisDeltaDelay[slowAxis] / MS_001)
   Pst.Str(string(" ms"))
-      
-  'lastHalfStep[slowAxis] := cnt
-  'lastHalfStep[slowAxis] -= axisDelay[slowAxis] / 2
+
   Pst.str(string(11, 13, "nextY = "))
   Pst.Dec(nextY)
   Pst.str(string(11, 13, "xAtNextY = "))
   Pst.Dec(xAtNextY)
-      
-  'Cnc.PressToContinue
 
 PUB AdjustSpeed
 
@@ -474,134 +306,13 @@ PRI ComputeAccelIntervals(localMax, localMin, localChange, localAccelInterval) |
       Pst.Dec(result)
       Pst.Str(string(", nextStep = "))
       Pst.Dec(nextStep)}}
-    localMax -= localChange  
-  
-  ''Pst.Str(string(11, 13, "accelIntervals = "))
-  ''Pst.Dec(result)
-      
-    'ifnot sineIndex // $200 '32
-      'Cnc.PressToContinue
- 
-      
+    localMax -= localChange
     
-   
-   { iFactor[motorIndex] := nNum[motorIndex] / nDenom[motorIndex]
-    Pst.str(string(11, 13, "delay["))
-    Pst.Dec(motorIndex)
-    Pst.str(string("][0] = "))
-    Pst.Dec(axisDelay[motorIndex])
-    Pst.str(string(11, 13, "minDelay["))
-    Pst.Dec(motorIndex)
-    Pst.str(string("] = "))
-    Pst.Dec(minDelay[motorIndex])
-    Pst.str(string(11, 13, "maxDelay["))
-    Pst.Dec(motorIndex)
-    Pst.str(string("] = "))
-    Pst.Dec(maxDelay[motorIndex])
-    Pst.str(string(11, 13, "nNum["))
-    Pst.Dec(motorIndex)
-    Pst.str(string("] = "))
-    Pst.Dec(nNum[motorIndex])
-    Pst.str(string(11, 13, "nDenom["))
-    Pst.Dec(motorIndex)
-    Pst.str(string("] = "))
-    Pst.Dec(nDenom[motorIndex])
-    Pst.str(string(11, 13, "iFactor["))
-    Pst.Dec(motorIndex)
-    Pst.str(string("] = "))
-    Pst.Dec(iFactor[motorIndex])
+DAT
 
-  longfill(@finishedFlag, 0, 4)
-     
-  localIndex := 1
-  
-  repeat
-    repeat motorIndex from 0 to 1
-      if finishedFlag[motorIndex]
-        next
-      previousDelay[motorIndex] := axisDelay[motorIndex]
-      difference0 := (2 * axisDelay[motorIndex]) / {
-      } (TtaMethod(nNum[motorIndex], localIndex, nDenom[motorIndex]) + 1) <# 1
-      
-      difference1 := (2 * axisDelayI[motorIndex]) / ((iFactor[motorIndex] * localIndex) + 1) <# 1
-      axisDelay[motorIndex] -= difference0
-      axisDelayI[motorIndex] -= difference1
-      delayTotal[motorIndex] += axisDelay[motorIndex]
-      delayTotalI[motorIndex] += axisDelayI[motorIndex]
-      Pst.str(string(11, 13, "delay["))
-      Pst.Dec(motorIndex)
-      Pst.str(string("]["))
-      Pst.Dec(localIndex)
-      Pst.str(string("] = "))
-      Pst.Dec(axisDelay[motorIndex])
-      Pst.str(string(", difference0 = "))
-      Pst.Dec(difference0)
-      Pst.str(string(", delayI = "))
-      Pst.Dec(axisDelayI[motorIndex])
-      Pst.str(string(", difference1 = "))
-      Pst.Dec(difference1)
-      'result := TtaMethod(axisDelay[0], maxDelay[0], previousDelay[0])
-      {Pst.Dec(result)
-      Pst.str(string(" / "))
-      Pst.Dec(maxDelay[motorIndex])
-      Pst.str(string(", total = "))
-      Pst.Dec(delayTotal[motorIndex]) }
-      if axisDelay[motorIndex] =< minDelay[motorIndex] and finishedFlag[motorIndex] == 0
-        Pst.str(string(11, 13, "I minDelay["))
-        Pst.Dec(motorIndex)
-        Pst.str(string("] reached in "))
-        Pst.Dec(localIndex)
-        Pst.str(string(" steps, minDelay = "))
-        Pst.Dec(minDelay[motorIndex])
-        finalTotal[motorIndex] := delayTotal[motorIndex]
-        finalStepsI[motorIndex] := localIndex 
-        finishedFlag[motorIndex] := 1
-        PressToContinue
-      if axisDelayI[motorIndex] =< minDelay[motorIndex] and finishedFlagI[motorIndex] == 0
-        Pst.str(string(11, 13, "  minDelay["))
-        Pst.Dec(motorIndex)
-        Pst.str(string("] reached in "))
-        Pst.Dec(localIndex)
-        Pst.str(string(" steps, minDelay = "))
-        Pst.Dec(minDelay[motorIndex])
-        finalTotalI[motorIndex] := delayTotalI[motorIndex]
-        finalSteps[motorIndex] := localIndex
-        finishedFlagI[motorIndex] := 1
-        PressToContinue
-
-    'Pst.str(string(11, 13, "total[1]/total[0] * 1000 = "))
-    'Pst.Dec(TtaMethod(delayTotal[1], 1000, delayTotal[0]))  
-    ifnot localIndex // pauseInterval
-      PressToContinue
-    
-    localIndex++  
-  until finishedFlag[0] and finishedFlag[1] and finishedFlagI[0] and finishedFlagI[1]
-
-  repeat motorIndex from 0 to 1
-    Pst.str(string(11, 13, "maxDelay["))
-    Pst.Dec(motorIndex)
-    Pst.str(string("] = "))
-    Pst.Dec(maxDelay[motorIndex])
-    Pst.str(string(", minDelay = "))
-    Pst.Dec(minDelay[motorIndex])
-
-    Pst.str(string(11, 13, "finalTotal = "))
-    Pst.Dec(finalTotal[motorIndex])
-    Pst.str(string(", finalTotalI = "))
-    Pst.Dec(finalTotalI[motorIndex])
-    Pst.str(string(11, 13, "finalSteps["))
-    Pst.Dec(motorIndex)
-    Pst.str(string("] = "))
-    Pst.Dec(finalSteps[motorIndex])
-    Pst.str(string(", finalStepsI = "))
-    Pst.Dec(finalStepsI[motorIndex])
-
-    Pst.str(string(11, 13, "nNum["))
-    Pst.Dec(motorIndex)
-    Pst.str(string("] = "))
-    Pst.Dec(nNum[motorIndex])
-    Pst.str(string(", nDenom = "))
-    Pst.Dec(nDenom[motorIndex])
-    Pst.str(string(", iFactor = "))
-    Pst.Dec(iFactor[motorIndex])     }
- 
+minDelay                long 100 * MS_001, 0-0
+maxDelay                long 250 * MS_001, 0-0 
+axisDeltaDelay          long 20 * MS_001, 0-0
+defaultDeltaDelay       long 20 * MS_001, 0-0
+timesToA                long 132
+accelerationInterval    long 300 * MS_001   
