@@ -142,10 +142,10 @@ PUB DecPoint(value, decimalPlaces) | localBuffer[4]
 CON
 
   SCALED_MULTIPLIER = 1000
-  MAX_DELAY = MS_001 * 20
-  MIN_DELAY = Header#MIN_DELAY
-  ACCELERATION_INTERVAL = MS_001 * 100
-  DELAY_CHANGE = MS_001 
+  'MAX_DELAY = MS_001 * 20
+  'MIN_DELAY = Header#MIN_DELAY
+  'ACCELERATION_INTERVAL = MS_001 * 100
+  'DELAY_CHANGE = MS_001 
   X_AXIS = Header#X_AXIS
   Y_AXIS = Header#Y_AXIS
   SCALED_TAU = round(2.0 * pi * float(SCALED_MULTIPLIER))
@@ -156,20 +156,23 @@ CON
   
 DAT
 
-pauseInterval           long 40
-minDelay                long 80_000, 0-0 'US_001 * 1_000
-maxDelay                long 1_600_000, 3_200_000 'US_001 * 20_000
-
-timeToA                 long 219
+'pauseInterval           long 40
+minDelay                long 100 * MS_001, 0-0
+maxDelay                long 250 * MS_001, 0-0 
+axisDeltaDelay          long 20 * MS_001, 0-0
+defaultDeltaDelay       long 20 * MS_001, 0-0
+timesToA                long 132
+accelerationInterval    long 300 * MS_001   
 
 VAR
   long axisDelay[2], previousDelay[2], delayTotal[2], {
-} axisDeltaDelay[2], xIndex, yIndex, radius, xSquared, ySquared, {
+} xIndex, yIndex, radius, xSquared, ySquared, {
 } rSquared, fastAxis, slowAxis, motorIndex, previousY, {
 } xAtNextY, nextY, nextYSquared, fastStepsPerSlow, now, lastStep[2]
-  long accelSteps[2], fullSpeedSteps[2], decelSteps[2]
+  'long accelSteps[2]
+  long fullSpeedSteps[2], decelSteps[2]
   long accelPhase, lastAccel[2], activeAccel[2]
-  long stepState[2]
+  long stepState[2], otherAxis[2], lastHalfStep[2], lastAccelCnt
   
 PUB TestMath
 '' There's a problem here with when the fast and slow axes switch.
@@ -178,66 +181,82 @@ PUB TestMath
   
   fastAxis := Header#X_AXIS
   slowAxis := Header#Y_AXIS
-  axisDelay[fastAxis] := MAX_DELAY
-  axisDeltaDelay[fastAxis] := -DELAY_CHANGE
+  otherAxis[fastAxis] := slowAxis
+  otherAxis[slowAxis] := fastAxis
+  
+  axisDelay[fastAxis] := maxDelay 'MAX_DELAY
+  axisDeltaDelay[fastAxis] := -defaultDeltaDelay
      
-  radius := 1600
+  radius := 400 '1600
   rSquared := radius * radius
 
   'radius * SCALED_MULTIPLIER / SCALED_ROOT_2
   decelSteps[fastAxis] := radius ' total steps (reached at end of decel phase)
   
-  accelSteps[fastAxis] := ComputeAccelIntervals(axisDelay[fastAxis], MIN_DELAY, {
-  } DELAY_CHANGE, ACCELERATION_INTERVAL) '(reached at end of accel phase)
+  timesToA := ComputeAccelIntervals(axisDelay[fastAxis], minDelay, {
+  } defaultDeltaDelay, accelerationInterval) '(reached at end of accel phase)
 
-  fullSpeedSteps[fastAxis] := radius - accelSteps[fastAxis]
+  fullSpeedSteps[fastAxis] := radius - timesToA
   ' all but final decel (reached at end of full speed phase)
   
   xIndex := 0
   xSquared := xIndex * xIndex
-  yIndex := radius
-  nextY := yIndex - 1
-  nextYSquared := nextY * nextY
-  xAtNextY := ^^(rSquared - nextYSquared)
-  fastStepsPerSlow := ||(xAtNextY - xIndex)
-  axisDelay[slowAxis] := axisDelay[fastAxis] * fastStepsPerSlow
-  axisDeltaDelay[slowAxis] := axisDeltaDelay[fastAxis] * fastStepsPerSlow
+  nextY := radius
+  
+  ComputeNextY
 
   Pst.str(string(11, 13, "max delay = "))
-  Pst.Dec(axisDelay[fastAxis])
-  Pst.str(string(", min delay = "))
-  Pst.Dec(MIN_DELAY)
-  Pst.str(string(", delay change = "))
-  Pst.Dec(DELAY_CHANGE)
-  Pst.str(string(", accel interval = "))
-  Pst.Dec(ACCELERATION_INTERVAL)
-  Pst.str(string(", accelSteps = "))
-  Pst.Dec(accelSteps[fastAxis])
+  Pst.Dec(axisDelay[fastAxis] / MS_001)
+  Pst.str(string(" ms, min delay = "))
+  Pst.Dec(minDelay / MS_001)
+  Pst.str(string(" ms, delay change = "))
+  Pst.Dec(axisDeltaDelay / MS_001)
+  Pst.str(string(" ms, accel interval = "))
+  Pst.Dec(accelerationInterval / MS_001)
+  Pst.str(string(" ms, timesToA = "))
+  Pst.Dec(timesToA)
      
   Pst.str(string(11, 13, "----------------------------"))
 
   Pst.str(string(11, 13, "Accelerate Phase"))
    
   now := cnt
-  lastStep[0] := lastStep[1] := now
+  lastHalfStep[0] := lastHalfStep[1] := lastStep[0] := lastStep[1] := now
   lastHalfStep[fastAxis] -= axisDelay[fastAxis] / 2
   lastHalfStep[slowAxis] -= axisDelay[slowAxis] / 2
-  
+  lastAccelCnt := now
   repeat
-    repeat
-      now := cnt
-      if now - lastHalfStep[fastAxis] > axisDelay[fastAxis]
-        ComputeNextHalfStep(fastAxis)
-      if now - lastHalfStep[slowAxis] > axisDelay[slowAxis]
-        ComputeNextFastStep(slowAxis)
-      if now - lastStep[fastAxis] > axisDelay[fastAxis]
-        ComputeNextFastStep(fastAxis)
-      if now - lastStep[slowAxis] > axisDelay[slowAxis]
-        ComputeNextSlowStep
-      if now - lastStep[slowAxis] > axisDelay[slowAxis]
-        AdjustSpeed    
+    
+    now := cnt
+    if now - lastHalfStep[fastAxis] > axisDelay[fastAxis]
+      'Pst.str(string(11, 13, "n-Hf= "))
+      'Pst.Dec((now - lastHalfStep[fastAxis]) / MS_001)
+      
+      ComputeNextHalfStep(fastAxis)
+    if now - lastHalfStep[slowAxis] > axisDelay[slowAxis]
+      Pst.str(string(11, 13, "n-Hs= "))
+      Pst.Dec((now - lastHalfStep[slowAxis]) / MS_001)
+      ComputeNextHalfStep(slowAxis)
+    if now - lastStep[fastAxis] > axisDelay[fastAxis]
+      'Pst.str(string(11, 13, "n-f= "))
+      'Pst.Dec((now - lastStep[fastAxis]) / MS_001)
+      ComputeNextFullStep(fastAxis)
+     
+    if now - lastAccelCnt > accelerationInterval
+      'Pst.str(string(11, 13, "n-a= "))
+      'Pst.Dec((now - lastAccelCnt) / MS_001)
+      lastAccelCnt += accelerationInterval
+      AdjustSpeed
+  while xIndex < yIndex
+
+  Pst.str(string(11, 13, "x = "))
+  Pst.Dec(xIndex)
+  Pst.str(string(", y = "))
+  Pst.Dec(yIndex)
+  Pst.str(string(11, 13, "Done! Program Over"))
+  repeat
         
-  repeat 'xIndex from 0 to 11
+{  repeat 'xIndex from 0 to 11
     xIndex++
     xSquared := xIndex * xIndex
     ySquared := rSquared - xSquared
@@ -269,69 +288,162 @@ PUB TestMath
   Pst.str(string(11, 13, "----------------------------"))
   
   repeat
-  
+          }
 PUB ComputeNextHalfStep(localAxis)
 
   if stepState[localAxis]
+    Pst.str(string(11, 13, "ComputeNextHalfStep, stepState[", 7))
+    Pst.Dec(localAxis)
+    Pst.Str(string("] = "))
+    Pst.Dec(stepState[localAxis])
     return
-  lastHalfStep[localAxis] += axisDelay[localAxis] 
+  if localAxis == slowAxis
+    Pst.str(string(11, 13, "Slow Axis Half Step", 7))
+
+  lastHalfStep[localAxis] += axisDelay[localAxis]
+  {Pst.str(string(11, 13, "lastHalfStep["))
+  Pst.Dec(localAxis)
+  Pst.Str(string("] = "))
+  Pst.Dec(lastHalfStep[localAxis] / MS_001)
+  Pst.Str(string(" ms"))  }
+      
   'outa[stepPin[localAxis] := 1
   stepState[localAxis] := 1
   
 PUB ComputeNextFullStep(localAxis)
 
+  {Pst.str(string(11, 13, "ComputeNextFullStep("))
+  Pst.Dec(localAxis)
+  Pst.Str(string(")"))  }
   ifnot stepState[localAxis]
-    return
+    Pst.str(string(11, 13, "ComputeNextFullStep, stepState[", 7))
+    Pst.Dec(localAxis)
+    Pst.Str(string("] = "))
+    Pst.Dec(stepState[localAxis])
+    return             ' get half step first
   lastStep[localAxis] += axisDelay[localAxis]
   xIndex[localAxis]++
   'outa[stepPin[localAxis] := 0
   stepState[localAxis] := 0
-
-  if xIndex[Header#X_AXIS] == xAtNextY
-    ifnot stepState[localAxis]
+  if xIndex == radius / 2
+    Pst.str(string(11, 13, "Half Radius! *************************"))
+  elseif xIndex == yIndex
+    Pst.str(string(11, 13, "***********************************************************************"))
+    Pst.str(string(11, 13, "X Equals Y ************************************************************"))
+    Pst.str(string(11, 13, "***********************************************************************"))
+    'Cnc.PressToContinue
+  elseif xIndex == 283
+    Pst.str(string(11, 13, "***********************************************************************"))
+    Pst.str(string(11, 13, "X Equals 283 **********************************************************"))
+    Pst.str(string(11, 13, "***********************************************************************"))
+    'Cnc.PressToContinue
+  if xIndex[localAxis] == xAtNextY
+    ifnot stepState[otherAxis[localAxis]]
       Pst.str(string(7, 11, 13, "Error! Slow axis in wrong stepState!", 7))
-      Pst.str(string(11, 13, "lastHalfStep[localAxis] = "))
-      Pst.Dec(lastHalfStep[localAxis])
+      Pst.str(string(11, 13, "lastHalfStep[otherAxis[localAxis]] = "))
+      Pst.Dec(lastHalfStep[otherAxis[localAxis]] / MS_001)
+      Pst.Str(string(" ms"))
+      Pst.str(string(11, 13, "lastHalfStep[otherAxis[localAxis]] = "))
+      Pst.Dec(lastHalfStep[otherAxis[localAxis]] / MS_001)
+      Pst.Str(string(" ms"))
+      Pst.str(string(11, 13, "next half step should be = "))
+      Pst.Dec((lastHalfStep[otherAxis[localAxis]] + axisDelay[otherAxis[localAxis]]) / MS_001)
+      Pst.Str(string(" ms"))
+      Pst.str(string(11, 13, "cnt = "))
+      Pst.Dec(cnt / MS_001)
+      Pst.Str(string(" ms"))
       repeat
-      
+
+    'outa[stepPin[otherAxis[localAxis]]
+    stepState[otherAxis[localAxis]] := 0
+    ComputeNextY
+    if xIndex == yIndex
+      Pst.str(string(11, 13, "X Equals Y *************************"))
+      'Cnc.PressToContinue
   {if localAxis == slowAxis
     ComputeNextSlowStep(localAxis)
     return }
     
   if accelPhase == 0
-    if xIndex[localAxis] > accelSteps[localAxis]
-      Pst.str(string(11, 13, "Full Speed Phase"))
+    if xIndex[localAxis] > timesToA
+      Pst.str(string(11, 13, "Full Speed Phase ********************"))
       accelPhase++
       lastAccel[localAxis] := axisDelay[localAxis]
-      axisDelay[localAxis] := MIN_DELAY
-      lastHalfStep[localAxis] := lastAccel[localAxis] - (MIN_DELAY / 2)
-      '' Compute slow halfStep too?
+      axisDelay[localAxis] := minDelay
+      'lastHalfStep[localAxis] := lastAccel[localAxis] - (minDelay / 2)
+      lastHalfStep[localAxis] := now - (minDelay / 2)
+      '' Compute slow halfStep too?  No not yet.
       axisDeltaDelay[localAxis] := 0
+      axisDeltaDelay[otherAxis[localAxis]] := 0
   elseif accelPhase == 1
     if xIndex[localAxis] > fullSpeedSteps[localAxis]
       Pst.str(string(11, 13, "Decelerate Phase"))
       accelPhase++
       axisDelay[localAxis] := lastAccel[localAxis]
-      axisDeltaDelay[localAxis] := DELAY_CHANGE 
+      axisDeltaDelay[localAxis] := defaultDeltaDelay
+      lastHalfStep[localAxis] := now - (axisDelay[localAxis] / 2)
   elseif accelPhase == 2
     if xIndex[localAxis] > decelSteps[localAxis]
       Pst.str(string(11, 13, "Done! Program Over"))
       repeat
-PUB ComputeNextSlowStep
-
-  lastStep[slowAxis] += axisDelay[slowAxis]
-  xIndex[slowAxis] ++
-
+      
+  Pst.str(string(11, 13, "x = "))
+  Pst.Dec(xIndex)
+  Pst.str(string(", y = "))
+  Pst.Dec(yIndex)
   
+PUB ComputeNextY
+
+  Pst.str(string(11, 13, "ComputeNextY"))
+  
+  yIndex := nextY
+  nextY := yIndex - 1
+  nextYSquared := nextY * nextY
+  xAtNextY := ^^(rSquared - nextYSquared)
+  fastStepsPerSlow := ||(xAtNextY - xIndex)
+  axisDelay[slowAxis] := axisDelay[fastAxis] * fastStepsPerSlow
+  axisDeltaDelay[slowAxis] := axisDeltaDelay[fastAxis] * fastStepsPerSlow
+  lastHalfStep[slowAxis] := now - (axisDelay[slowAxis] / 2)
+  
+  Pst.str(string(11, 13, "axisDelay[slowAxis] = "))
+  Pst.Dec(axisDelay[slowAxis] / MS_001)
+  Pst.Str(string(" ms"))
+  Pst.str(string(11, 13, "axisDeltaDelay[slowAxis] = "))
+  Pst.Dec(axisDeltaDelay[slowAxis] / MS_001)
+  Pst.Str(string(" ms"))
       
-      axisDelay[localAxis] := MIN_DELAY
-      axisDeltaDelay[localAxis] := 0
+  'lastHalfStep[slowAxis] := cnt
+  'lastHalfStep[slowAxis] -= axisDelay[slowAxis] / 2
+  Pst.str(string(11, 13, "nextY = "))
+  Pst.Dec(nextY)
+  Pst.str(string(11, 13, "xAtNextY = "))
+  Pst.Dec(xAtNextY)
       
+  'Cnc.PressToContinue
+
 PUB AdjustSpeed
 
   axisDelay[fastAxis] += axisDeltaDelay[fastAxis]
   axisDelay[slowAxis] += axisDeltaDelay[slowAxis]
-
+  {Pst.str(string(11, 13, "AdjustSpeed = axisDelay[ "))
+  Pst.Dec(fastAxis)
+  Pst.Str(string("] = "))
+  Pst.Dec(axisDelay[fastAxis] / MS_001)
+  Pst.Str(string(" ms, axisDelay[ "))
+  Pst.Dec(slowAxis)
+  Pst.Str(string("] = "))
+  Pst.Dec(axisDelay[slowAxis] / MS_001)
+  Pst.Str(string(" ms"))
+  Pst.str(string(11, 13, "axisDeltaDelay[ "))
+  Pst.Dec(fastAxis)
+  Pst.Str(string("] = "))
+  Pst.Dec(axisDeltaDelay[fastAxis] / MS_001)
+  Pst.Str(string(" ms, axisDeltaDelay[ "))
+  Pst.Dec(slowAxis)
+  Pst.Str(string("] = "))
+  Pst.Dec(axisDeltaDelay[slowAxis] / MS_001)
+  Pst.Str(string(" ms"))    }
+  
 PRI ComputeAccelIntervals(localMax, localMin, localChange, localAccelInterval) | nextAccel, {
 } nextStep
 
