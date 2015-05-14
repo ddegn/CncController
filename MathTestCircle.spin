@@ -101,7 +101,7 @@ OBJ
   Pst : "Parallax Serial TerminalDat"
   Format : "StrFmt"
   'Sd[1]: "SdSmall" 
-  Cnc : "CncCommonMethods"
+  Cnc : "CncCommonMethodsCircle"
   'Motor : "MotorControl"
 
 PUB Setup
@@ -116,7 +116,8 @@ PUB Setup
   Pst.RxFlush
 
   Cnc.Start
-  Pst.Clear
+  waitcnt(clkfreq / 2 + cnt) 
+  'Pst.Clear
   
   dira[Header#STEP_X_PIN] := 1           
   dira[Header#DIR_X_PIN] := 1           
@@ -627,7 +628,9 @@ PUB ExecuteCircle | radiusOverRoot2, {
   
   
   now := cnt
-  lastHalfStep[0] := lastHalfStep[1] := lastStep[0] := lastStep[1] := now
+  lastStep := now
+  lastHalfStep[0] := now
+  lastHalfStep[1] := now
   lastHalfStep[presentFast] -= axisDelay[presentFast] / 2
   lastHalfStep[presentSlow] -= axisDelay[presentSlow] / 2
   lastAccelCnt := now
@@ -649,15 +652,15 @@ PUB ExecuteCircle | radiusOverRoot2, {
       Pst.str(string("]= "))
       Pst.Dec(axisDelay[presentSlow] / MS_001) }
       ComputeNextHalfStep(presentSlow)
-    if now - lastStep[presentFast] > axisDelay[presentFast]
+    if now - lastStep > axisDelay[presentFast]
       {Pst.str(string(11, 13, "n-f= "))
-      Pst.Dec((now - lastStep[presentFast]) / MS_001) }
+      Pst.Dec((now - lastStep) / MS_001) }
       ComputeNextFullStep(presentFast)
      
     if now - lastAccelCnt > accelerationInterval
       {Pst.str(string(11, 13, "n-a= "))
-      Pst.Dec((now - lastAccelCnt) / MS_001)
-      lastAccelCnt += accelerationInterval  }
+      Pst.Dec((now - lastAccelCnt) / MS_001)}
+      lastAccelCnt += accelerationInterval  
       AdjustSpeed
   'while xIndex < yIndex
   while stepsToTakeX or stepsToTakeY 'activeOctants
@@ -701,13 +704,11 @@ PUB ComputeNextHalfStep(localAxis)
     Pst.str(string(11, 13, "difference = "))
     Pst.Dec((cnt - lastHalfStep[localAxis]) / MS_001)
     Pst.Str(string(" ms "))  
-    Pst.str(string(11, 13, "lastStep["))
-    Pst.Dec(localAxis)
-    Pst.Str(string("] = "))
-    Pst.Dec(lastStep[localAxis] / MS_001)
+    Pst.str(string(11, 13, "lastStep = "))
+    Pst.Dec(lastStep / MS_001)
     Pst.Str(string(" ms"))  
     Pst.str(string(11, 13, "difference = "))
-    Pst.Dec((cnt - lastStep[localAxis]) / MS_001)
+    Pst.Dec((cnt - lastStep) / MS_001)
     Pst.Str(string(" ms "))  }
     return
 
@@ -734,7 +735,7 @@ PUB ComputeNextHalfStep(localAxis)
     Pst.Dec((lastHalfStep[localAxis] + axisDelay[localAxis]) / MS_001)
     Pst.Str(string(" ms"))
     Pst.str(string(11, 13, "cnt at next full step = "))
-    Pst.Dec((lastStep[localAxis] + axisDelay[localAxis]) / MS_001)
+    Pst.Dec((lastStep + axisDelay[localAxis]) / MS_001)
     Pst.Str(string(" ms")) 
     
   'outa[stepPin[localAxis] := 1
@@ -753,33 +754,27 @@ PUB ComputeNextFullStep(localAxis)
     Pst.Dec(stepState[localAxis])
     return             ' get half step first
 
-  {Pst.str(string(11, 13, "lastStep["))
-  Pst.Dec(localAxis)
-  Pst.Str(string("] was = "))
-  Pst.Dec(lastStep[localAxis] / MS_001)
+  {Pst.str(string(11, 13, "lastStep was = "))
+  Pst.Dec(lastStep / MS_001)
   Pst.Str(string(" ms")) }
   
-  'lastStep[localAxis] += axisDelay[localAxis]
-  pLastStep[localAxis] := lastStep[localAxis]
-  lastStep[localAxis] := cnt
+  'lastStep += axisDelay[localAxis]
+  pLastStep := lastStep
+  lastStep := cnt
   
-  {Pst.str(string(11, 13, "lastStep["))
-  Pst.Dec(localAxis)
-  Pst.Str(string("]  is = "))
-  Pst.Dec(lastStep[localAxis] / MS_001)
+  {Pst.str(string(11, 13, "lastStep  is = "))
+  Pst.Dec(lastStep / MS_001)
   Pst.Str(string(" ms")) }   
 
   if 0 'xIndex > 62
-    Pst.str(string(11, 13, "lastStep["))
-    Pst.Dec(localAxis)
-    Pst.Str(string("] = "))
-    Pst.Dec(lastStep[localAxis] / MS_001)
+    Pst.str(string(11, 13, "lastStep = "))
+    Pst.Dec(lastStep / MS_001)
     Pst.Str(string(" ms"))  
     Pst.str(string(11, 13, "cnt = "))
     Pst.Dec(cnt / MS_001)
     Pst.Str(string(" ms"))
     Pst.str(string(11, 13, "difference full = "))
-    Pst.Dec((cnt - lastStep[localAxis]) / MS_001)
+    Pst.Dec((cnt - lastStep) / MS_001)
     Pst.Str(string(" ms (this should be a small value)"))
   'xIndex[localAxis] += directionX[(PIECES_IN_CIRCLE * localAxis) + activeOctant]
   xIndex[localAxis] += presentDirectionX[localAxis]
@@ -791,10 +786,8 @@ PUB ComputeNextFullStep(localAxis)
     Pst.Str(string("] = "))
     Pst.Dec(lastHalfStep[localAxis] / MS_001)
     Pst.Str(string(" ms"))  
-    Pst.str(string(11, 13, "lastStep["))
-    Pst.Dec(localAxis)
-    Pst.Str(string("] = "))
-    Pst.Dec(lastStep[localAxis] / MS_001)
+    Pst.str(string(11, 13, "lastStep = "))
+    Pst.Dec(lastStep / MS_001)
     Pst.Str(string(" ms"))  
     Pst.str(string(11, 13, "cnt = "))
     Pst.Dec(cnt / MS_001)
@@ -803,13 +796,13 @@ PUB ComputeNextFullStep(localAxis)
     Pst.Dec((cnt - lastHalfStep[localAxis]) / MS_001)
     Pst.Str(string(" ms"))
     Pst.str(string(11, 13, "difference full = "))
-    Pst.Dec((cnt - lastStep[localAxis]) / MS_001)
+    Pst.Dec((cnt - lastStep) / MS_001)
     Pst.Str(string(" ms (this should be a small value)"))
     Pst.str(string(11, 13, "cnt at next half step = "))
     Pst.Dec((lastHalfStep[localAxis] + axisDelay[localAxis]) / MS_001)
     Pst.Str(string(" ms"))
     Pst.str(string(11, 13, "cnt at next full step = "))
-    Pst.Dec((lastStep[localAxis] + axisDelay[localAxis]) / MS_001)
+    Pst.Dec((lastStep + axisDelay[localAxis]) / MS_001)
     Pst.Str(string(" ms")) }
     
   ifnot xIndex[localAxis]  
@@ -953,13 +946,11 @@ PUB ComputeNextFullStep(localAxis)
     Pst.str(string(", and "))
     Pst.Dec(lastHalfStep[1] / MS_001)
     Pst.str(string(11, 13, "pLastStep = "))
-    Pst.Dec(pLastStep[0] / MS_001)
-    Pst.str(string(", and "))
-    Pst.Dec(pLastStep[1] / MS_001)
+    Pst.Dec(pLastStep / MS_001)
+   
     Pst.str(string(11, 13, "lastStep = "))
-    Pst.Dec(lastStep[0] / MS_001)
-    Pst.str(string(", and "))
-    Pst.Dec(lastStep[1] / MS_001)
+    Pst.Dec(lastStep / MS_001)
+   
 
    {}'150514d 
   {if xIndex > 300
@@ -1088,14 +1079,12 @@ PUB ComputeNextSlow | previousSlow
       Pst.str(string(11, 13, "next half step should be = "))
       Pst.Dec((lastHalfStep[presentSlow] + axisDelay[presentSlow]) / MS_001)
       Pst.Str(string(" ms"))
-      Pst.str(string(11, 13, "next slow full step should be = "))
-      Pst.Dec((lastStep[presentSlow] + axisDelay[presentSlow]) / MS_001)
-      Pst.Str(string(" ms"))
+
       Pst.str(string(11, 13, "next fast full step should be = "))
-      Pst.Dec((lastStep[presentFast] + axisDelay[presentFast]) / MS_001)
+      Pst.Dec((lastStep + axisDelay[presentFast]) / MS_001)
       Pst.Str(string(" ms"))
       Pst.str(string(11, 13, "fastAtNextSlow fast full step should be = "))
-      Pst.Dec((lastStep[presentFast] + (axisDelay[presentFast] * fastStepsPerSlow)) / MS_001)
+      Pst.Dec((lastStep + (axisDelay[presentFast] * fastStepsPerSlow)) / MS_001)
       Pst.Str(string(" ms"))
       Pst.str(string(11, 13, "cnt = "))
       Pst.Dec(cnt / MS_001)
@@ -1111,9 +1100,7 @@ PUB SwapSpeeds
   result := axisDelay[0]
   axisDelay[0] := axisDelay[1]
   axisDelay[1] := result
-  result := lastStep[0]
-  lastStep[0] := lastStep[1]
-  lastStep[1] := result
+
   result := lastHalfStep[0]
   lastHalfStep[0] := lastHalfStep[1]
   lastHalfStep[1] := result
@@ -1187,15 +1174,13 @@ PUB AdjustSpeed
   Pst.str(string(11, 13, "cnt at next half step (fast)= "))
   Pst.Dec((lastHalfStep[presentFast] + axisDelay[presentFast]) / MS_001)
   Pst.Str(string(" ms"))
-  Pst.str(string(11, 13, "cnt at next full step (fast)= "))
-  Pst.Dec((lastStep[presentFast] + axisDelay[presentFast]) / MS_001)
+  Pst.str(string(11, 13, "cnt at next full step = "))
+  Pst.Dec((lastStep + axisDelay[presentFast]) / MS_001)
   Pst.Str(string(" ms"))
   Pst.str(string(11, 13, "cnt at next half step (slow)= "))
   Pst.Dec((lastHalfStep[presentSlow] + axisDelay[presentSlow]) / MS_001)
   Pst.Str(string(" ms"))
-  Pst.str(string(11, 13, "cnt at next full step (slow)= "))
-  Pst.Dec((lastStep[presentSlow] + axisDelay[presentSlow]) / MS_001)
-  Pst.Str(string(" ms"))
+ 
   Pst.str(string(11, 13, "cnt = "))
   Pst.Dec(cnt / MS_001)
   Pst.Str(string(" ms"))     }
