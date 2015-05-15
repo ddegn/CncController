@@ -101,7 +101,7 @@ OBJ
   Pst : "Parallax Serial TerminalDat"
   Format : "StrFmt"
   'Sd[1]: "SdSmall" 
-  Cnc : "CncCommonMethodsCircle"
+  Cnc : "CncCommonMethods"
   'Motor : "MotorControl"
 
 PUB Setup
@@ -116,7 +116,7 @@ PUB Setup
   Pst.RxFlush
 
   Cnc.Start
-  waitcnt(clkfreq / 2 + cnt) 
+  waitcnt(clkfreq * 2 + cnt) 
   'Pst.Clear
   
   dira[Header#STEP_X_PIN] := 1           
@@ -918,6 +918,7 @@ PUB ComputeNextFullStep(localAxis)
       
 
   {'150514d}
+  {'150514e
   previousCnt := newCnt
   newCnt := cnt
   differenceCnt := newCnt - previousCnt
@@ -933,7 +934,7 @@ PUB ComputeNextFullStep(localAxis)
   DecPoint(newCnt / MS_001, 3)
   Pst.Str(string(" s, difference = "))
   Pst.Dec(differenceCnt / MS_001)
-  Pst.Str(string(" ms"))
+  Pst.Str(string(" ms"))   } '150514e
   if differenceCnt > constant(100 * MS_001)
     Pst.str(string(11, 13, "fastAtNextSlow = "))
     Pst.Dec(fastAtNextSlow)

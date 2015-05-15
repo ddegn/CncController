@@ -155,7 +155,7 @@ PUB Start
   Pst.str(string(11, 13, "SD Card Driver Started"))
 
   
-  'MountSd(Header#OLED_DATA_SD)
+  MountSd(Header#OLED_DATA_SD)
 
   longfill(@oledStack, Header#STACK_CHECK_LONG, Header#MONITOR_OLED_STACK_SIZE)
   
@@ -2027,12 +2027,14 @@ PUB MountSd(sdInstance)
 '' sdLock should be set (if used) prior to calling this method.
 '' Returns 1 is no SD card is found.
 
-  ''Pst.str(string(11, 13, "MountSd Method"))
+  Pst.str(string(11, 13, "MountSd Method"))
+  Pst.str(string(11, 13, "Error Mounting SD Card #"))
+    Pst.dec(sdErrorNumber)
   if sdMountFlag[sdInstance]
     result := string("SD Card Already Mounted")
     return  
   sdErrorNumber := Sd[sdInstance].mountPartition(0)
-  ''Pst.str(string(11, 13, "After mount attempt.")) 
+  Pst.str(string(11, 13, "After mount attempt.")) 
   if sdErrorNumber
     sdFlag := Header#NOT_FOUND_SD
     result := 1
