@@ -5,7 +5,9 @@ CON
   ******* Private Notes *******
  
   150516a This appears to test the MotorControlX child program.
- 
+  150516b Save "TestMotorX" as "TestMotor". Begin adding circle code
+  to PASM.
+  
 }  
 CON
 

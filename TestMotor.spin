@@ -1,13 +1,13 @@
 DAT programName         byte "TestMotor", 0
 CON
 {  Test child motor control object.
-   This version doesn't appear to work.
 
   ******* Private Notes *******
  
-  150516a This appears to test the MotorControl child program. This version
-  doesn't compile.
- 
+  150516a This appears to test the MotorControlX child program.
+  150516b Save "TestMotorX" as "TestMotor". Begin adding circle code
+  to PASM.
+  
 }  
 CON
 
@@ -80,6 +80,7 @@ homedFlag               byte Header#UNKNOWN_POSITION, 0[3]
 positionX               long 0 '$80_00_00_00
 positionY               long 0 '$80_00_00_00
 positionZ               long 0 '$80_00_00_00
+oledStackPtr            long 0
  
 OBJ
 
@@ -90,16 +91,18 @@ OBJ
   Cnc : "CncCommonMethods"
   Motor : "MotorControl"
    
-PUB Setup(parameter0, parameter1) | cncCog
+PUB Setup
 
-  configPtr := Header.GetConfigName
-  fileNamePtr := Header.GetFileName
+  configPtr := Header.GetFileName(Header#CONFIG_FILE) 
+
+  'fileNamePtr := Header.GetFileName
+  fileNamePtr := Header.GetFileName(Header#CNC_DATA_FILE) 
   Pst.Start(115_200)
  
   'cognew(OledDemo, @stack)
-  debugLock := locknew
-  spiLock := locknew
-  Cnc.SetDebugLock(debugLock)
+  'debugLock := locknew
+  'spiLock := locknew
+  'Cnc.SetDebugLock(debugLock)
  
   repeat
     result := Pst.RxCount
@@ -110,15 +113,13 @@ PUB Setup(parameter0, parameter1) | cncCog
 
   'TestMath
   
-  cncCog := Cnc.Start(spiLock)
+  oledStackPtr := Cnc.Start'(spiLock)
 
   adcPtr := Cnc.GetAdcPtr
   buttonMask := 1 << Header#JOYSTICK_BUTTON_165
   
-  Pst.str(string(11, 13, "Helper object started on cog #"))
-  Pst.Dec(cncCog)   
-  Pst.Char(".")   
-
+  Pst.str(string(11, 13, "Helper object started."))
+ 
   waitcnt(clkfreq * 2 + cnt)
 
   'Cnc.PressToContinue
@@ -171,11 +172,11 @@ PUB MainLoop | axisIndex, distance[2]
     distance[0] += 1600
     distance[1] += 800
     Pst.str(string(11, 13, "Driving "))
-    Pst.str(Cnc.FindString(Cnc.GetAxisText, 0))
+    Pst.str(Header.FindString(Cnc.GetAxisText, 0))
     Pst.str(string(" motor "))
     Pst.Dec(distance[0])
     Pst.str(string(" steps and "))
-    Pst.str(Cnc.FindString(Cnc.GetAxisText, 1))
+    Pst.str(Header.FindString(Cnc.GetAxisText, 1))
     Pst.str(string(" motor "))
     Pst.Dec(distance[1])
     Pst.str(string(" steps."))
@@ -629,7 +630,7 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
             return
           next ' skip extra delimters
     Pst.str(string(11, 13, "expectedChar = ")) 
-    Pst.str(Cnc.FindString(@expectedCharText, expectedChar))
+    Pst.str(Header.FindString(@expectedCharText, expectedChar))
     
     if result == Header#COMMENT_START_CHAR
       Pst.str(string(11, 13, "Beginning of Comment"))
@@ -702,7 +703,7 @@ PUB InterpreteDesign(fileIndex) | delimiterCount, parameterIndex, scratchValue, 
 PUB CodeAction(sdInstance, localType, localValue)
 
   Pst.str(string(11, 13, "CodeAction("))
-  Pst.str(Cnc.FindString(@axesText, sdInstance))
+  Pst.str(Header.FindString(@axesText, sdInstance))
   Pst.str(string(", "))
   Pst.Char(localType)
   Pst.str(string(", "))
@@ -720,11 +721,11 @@ PUB CodeAction(sdInstance, localType, localValue)
 PUB ReadG(sdInstance, localValue)
 
   Pst.str(string(11, 13, "ReadG("))
-  Pst.str(Cnc.FindString(@axesText, sdInstance))
+  Pst.str(Header.FindString(@axesText, sdInstance))
   Pst.str(string(", "))
   Pst.Dec(localValue)
   Pst.str(string(" = "))
-  Pst.str(Cnc.FindString(@gCodeText, localValue))
+  Pst.str(Header.FindString(@gCodeText, localValue))
   Pst.Char(")")
   
   case localValue
@@ -782,7 +783,7 @@ PUB SetZDown(localDownFlag)
 PUB GetStepsFromUnits(localUnits, localValue, localMultiplier)
 
   Pst.str(string(11, 13, "GetStepsFromUnits("))
-  Pst.str(Cnc.FindString(@unitsText, localUnits))
+  Pst.str(Header.FindString(@unitsText, localUnits))
   Pst.str(string(", "))
   Pst.Dec(localValue)
   Pst.str(string(", "))
@@ -869,18 +870,18 @@ PRI GetLine(sdInstance) | x0, y0, stepPosition[2], longAxis, shortAxis, localBuf
       size++
     if decPoints[localIndex]
       size++ 
-    result := Format.Str(@localBuffer, Cnc.FindString(@xyzLabels, localIndex))
+    result := Format.Str(@localBuffer, Header.FindString(@xyzLabels, localIndex))
     result := Format.FDec(result, original[localIndex], size, decPoints[localIndex])
     result := Format.Ch(result, " ")
-    result := Format.Str(result, Cnc.FindString(@unitsTxt, units))
+    result := Format.Str(result, Header.FindString(@unitsTxt, units))
     byte[result] := 0
     Cnc.ScrollString(@localBuffer, 1)
     
   repeat localIndex from 0 to 1
-    result := Format.Str(@localBuffer, Cnc.FindString(@xyzLabels, localIndex))
+    result := Format.Str(@localBuffer, Header.FindString(@xyzLabels, localIndex))
     result := Format.Dec(result, x0[localIndex])
     result := Format.Ch(result, " ")
-    result := Format.Str(result, Cnc.FindString(@unitsText, Header#STEP_UNIT))
+    result := Format.Str(result, Header.FindString(@unitsText, Header#STEP_UNIT))
     byte[result] := 0
     Cnc.ScrollString(@localBuffer, 1)
 
@@ -1410,11 +1411,11 @@ PUB ReadM(sdInstance, localValue) : parameterCount | inputCharacter, expectedPar
 } delimiterCount
 
   Pst.str(string(11, 13, "ReadM("))
-  Pst.str(Cnc.FindString(@axesText, sdInstance))
+  Pst.str(Header.FindString(@axesText, sdInstance))
   Pst.str(string(", "))
   Pst.Dec(localValue)
   Pst.str(string(" = "))
-  Pst.str(Cnc.FindString(@mCodeText, localValue))
+  Pst.str(Header.FindString(@mCodeText, localValue))
   Pst.Char(")")
 
   delimiterCount := 1
@@ -1435,7 +1436,7 @@ PUB ReadM(sdInstance, localValue) : parameterCount | inputCharacter, expectedPar
   expectedParameters := 0
   
   Pst.str(string(11, 13))
-  Pst.str(Cnc.FindString(@mCodeText, localValue))
+  Pst.str(Header.FindString(@mCodeText, localValue))
     
   if expectedParameters
     Pst.str(string(" = "))
@@ -1464,11 +1465,11 @@ PUB ReadD(sdInstance, localValue) : parameterCount | inputCharacter, expectedPar
 } delimiterCount
 
   Pst.str(string(11, 13, "ReadD("))
-  Pst.str(Cnc.FindString(@axesText, sdInstance))
+  Pst.str(Header.FindString(@axesText, sdInstance))
   Pst.str(string(", "))
   Pst.Dec(localValue)
   Pst.str(string(" = "))
-  Pst.str(Cnc.FindString(@dCodeText, localValue))
+  Pst.str(Header.FindString(@dCodeText, localValue))
   Pst.Char(")")
 
   delimiterCount := 1
@@ -1490,7 +1491,7 @@ PUB ReadD(sdInstance, localValue) : parameterCount | inputCharacter, expectedPar
       } PROGRAM_NAME_D, EXTERNALLY_CREATED_D, CREATED_USING_PROGRAM_D, AUTHOR_NAME_D, {
       } PROJECT_NAME_D: }
   Pst.str(string(11, 13))
-  Pst.str(Cnc.FindString(@dCodeText, localValue))
+  Pst.str(Header.FindString(@dCodeText, localValue))
     
   if expectedParameters
     Pst.str(string(" = "))
@@ -1548,7 +1549,7 @@ PUB OpenConfig
         ResetConfig           }
       Header#TRANSITIONING_PROGRAM:
         'Pst.Str(string(11, 13, "Returning from ", QUOTE))
-        'Pst.Str(Cnc.FindString(@programNames, previousProgram))
+        'Pst.Str(Header.FindString(@programNames, previousProgram))
         'Pst.Char(QUOTE)
         previousProgram := Header#DESIGN_INPUT_MAIN
         programState := Header#ACTIVE_PROGRAM
