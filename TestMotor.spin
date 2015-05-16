@@ -1,11 +1,12 @@
 DAT programName         byte "TestMotor", 0
 CON
-{  Design Execute
-  This sub program reads the design file from the SD card and executes the instructions.
+{  Test child motor control object.
+   This version doesn't appear to work.
 
   ******* Private Notes *******
  
-  Change name from "EXECUTE_" to "TestMotor."
+  150516a This appears to test the MotorControl child program. This version
+  doesn't compile.
  
 }  
 CON
