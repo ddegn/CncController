@@ -1,4 +1,4 @@
-DAT programName         byte "MathTestSpiral", 0
+DAT programName         byte "MathTestSpiralScrath", 0
 CON
 {  
   This program tests an algorithm for generating appropriate delays to stepper motors.
@@ -337,6 +337,8 @@ PUB ExecuteSpiral | radiusOverRoot2, iteration, oldestLength, oldLength, newRadi
   
   repeat iteration from 0 to maxIterationIndex
 
+    Cnc.PressToContinue
+    
     newRadius := FindSize(iteration, oldestLength, oldLength)
     oldestLength := oldLength
     oldLength := newRadius
@@ -350,7 +352,7 @@ PUB ExecuteSpiral | radiusOverRoot2, iteration, oldestLength, oldLength, newRadi
     radius := ||newRadius * spiralScale 
     rSquared := radius * radius
 
-    if debugFlag
+    if true 'debugFlag
       Pst.Str(string(11, 13, "radius = "))
       Pst.Dec(radius)
       Pst.str(string(11, 13, "xIndex = "))
@@ -702,7 +704,7 @@ PUB NextFastStep
   previousCnt := newCnt
   newCnt := cnt
   differenceCnt := newCnt - previousCnt }
-  if debugFlag
+  if true 'debugFlag
     Pst.str(string(11, 13, "x = "))
     Pst.Dec(xIndex)
     Pst.str(string(", y = "))
@@ -763,19 +765,19 @@ PUB ComputeNextSlow | previousSlow
   if ||xIndex[presentSlow] == ||xIndex[presentFast] or ||previousSlow == ||xIndex[presentFast]
     AdvanceOctant
     '150514a Pst.str(@astriskLine)
-    {Pst.str(string(11, 13, "before SwapSpeeds, nextSlow (old) = "))
+    Pst.str(string(11, 13, "before SwapSpeeds, nextSlow (old) = "))
     Pst.Dec(nextSlow)
     Pst.str(string(11, 13, "transition okay? fastAtNextSlow (old) = "))
     Pst.Dec(fastAtNextSlow)
-    Pst.str(string(11, 13, "xIndex[presentSlow] (new) = "))
+    Pst.str(string(11, 13, "xIndex[presentSlow] (new position with old slow axis) = "))
     Pst.Dec(xIndex[presentSlow])
     Pst.str(string(11, 13, "xIndex[presentFast] = "))
     Pst.Dec(xIndex[presentFast])
-    Pst.str(string(11, 13, "presentSlow = "))
+    Pst.str(string(11, 13, "presentSlow axis = "))
     Pst.Dec(presentSlow)
     Pst.str(string(11, 13, "previousSlow = "))
     Pst.Dec(previousSlow) 
-    result := 1  }
+    result := 1  
     SwapSpeeds
     'repeat
 
@@ -798,28 +800,28 @@ PUB ComputeNextSlow | previousSlow
     Pst.Dec(presentDirectionX[presentSlow])
     CatastrophicError(string("fastAtNextSlow too large"))
     
-  {if result
+  if result
     Pst.str(string(7, 11, 13, "after SwapSpeeds, nextSlow (new) = "))
     Pst.Dec(nextSlow)
     Pst.str(string(11, 13, "fastAtNextSlow (new) = "))
-    Pst.Dec(fastAtNextSlow) }
+    Pst.Dec(fastAtNextSlow) 
 
    
   case activeOctant
     1, 4, 6, 7:
       -fastAtNextSlow
-      {'150514a Pst.str(string(11, 13, "negate fastAtNextSlow"))
+      Pst.str(string(11, 13, "negate fastAtNextSlow"))
       if result
         Pst.str(string(11, 13, "fastAtNextSlow (negated) = "))
-        Pst.Dec(fastAtNextSlow) } '150514a 
+        Pst.Dec(fastAtNextSlow) 
              
   fastStepsPerSlow := ||(fastAtNextSlow - xIndex[presentFast])
   delaySlow := delayFast * fastStepsPerSlow
   delayChangeSlow := delayChangeFast * fastStepsPerSlow
   lastHalfStepSlow := cnt - (delaySlow / 2)
 
-  '150514a Pst.str(string(11, 13, "fastStepsPerSlow = "))
-  '150514a Pst.Dec(fastStepsPerSlow)
+  Pst.str(string(11, 13, "fastStepsPerSlow = "))
+  Pst.Dec(fastStepsPerSlow)
   if ||fastStepsPerSlow > radius / 2
     Pst.str(string(7, 11, 13, "fastStepsPerSlow = "))
     Pst.Dec(fastStepsPerSlow)

@@ -144,10 +144,10 @@ rowOfBytes              byte 0[128]
 PUB Start
 
   sdFlag := Header#INITIALIZING_SD
-  
+
   Sd.fatEngineStart(Header#DOPIN, Header#ClkPIN, Header#DIPIN, Header#CSPIN, {
   } Header#WP_SD_PIN, Header#CD_SD_PIN, Header#RTC_PIN_1, Header#RTC_PIN_2, {
-  } Header#RTC_PIN_3)
+  } Header#RTC_PIN_3) 
   
   SetLocks
   SetFont(activeFont)
@@ -479,7 +479,7 @@ PUB SetOled(state, labelPtr, dataPtrPtr, dataQuantity)
     previousOledState := frozenState
           }
 PRI OledMonitor ': frozenState
-
+  
   Spi.Start(Spi#SSD1306_SWITCHCAPVCC, Spi#TYPE_128X64, @shiftRegisterOutput, @debugSpi)
   
   repeat
