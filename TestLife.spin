@@ -1,10 +1,16 @@
-DAT programName         byte "TestMotorsPasmLine", 0
+DAT programName         byte "TestLife", 0
 CON
-{  Test child linear motor control object.
+{  Test child motor control object.
 
   ******* Private Notes *******
  
-  150526a Begin updating PASM linear motion control object.
+  150516a This appears to test the MotorControlX child program.
+  150516b Save "TestMotorX" as "TestMotor". Begin adding circle code
+  to PASM.
+  TestMotorsPasmCircle Appears to work with circles starting on
+  even octants.
+  Change name from "TestMotorsPasmCircle" to "TestLife"
+  This didn't work.
   
 }  
 CON
@@ -87,9 +93,9 @@ OBJ
   Format : "StrFmt"
   'Sd[1]: "SdSmall" 
   Cnc : "CncCommonMethods"
-  Motor : "MotorControlPasmLine"
+  'Motor : "MotorControlPasmCircle"
    
-PUB Setup
+PUB Setup | seed
 
   configPtr := Header.GetFileName(Header#CONFIG_FILE) 
 
@@ -136,58 +142,294 @@ PUB Setup
   'repeat
   result := 0
  
-  repeat result from 0 to 2
-    Cnc.ResetDrv8711(result)
-    Pst.str(string(11, 13, "Reset axis #"))
-    Pst.Dec(result)   
-    Pst.Char(".")
-
-    Pst.str(string(11, 13, "Reading registers prior to setup."))
-    Cnc.ShowRegisters(result)
-    
-    Cnc.SetupDvr8711(result, Header#DEFAULT_DRIVE_DRV8711, Header#DEFAULT_MICROSTEP_CODE_DRV8711, {
-    } Header#DEFAULT_DECAY_MODE_DRV8711, Header#DEFAULT_GATE_SPEED_DRV8711, {
-    } Header#DEFAULT_GATE_DRIVE_DRV8711, Header#DEFAULT_DEADTIME_DRV8711)
-    Pst.str(string(11, 13, "Setup finished axis #"))
-    Pst.Dec(result)   
-    Pst.Char(".")
-    Cnc.PressToContinue
-    Pst.str(string(11, 13, "Reading registers."))
-    Cnc.ShowRegisters(result)
-    Cnc.PressToContinue    
-              
+ 
   Cnc.PressToContinue
-  Motor.Start(Cnc.Get165Address)
-   
+
+  seed := cnt
+
+  repeat result from 0 to MAX_DISPLAY_INDEX
+    lifeArray[result] := seed? & seed? & seed?
+
+  Cnc.SetOled(Header#PAUSE_MONITOR_OLED, @result, @result, 0)
+    
   MainLoop
 
 
-PUB MainLoop | axisIndex, distance[2]
+PUB MainLoop | bufferAddress
 
-  axisIndex := 0
-  longfill(@distance, 0, 2)
-  distance[1] := 6 ' 7
+  bufferAddress := Cnc.GetOledBuffer
   repeat
-    Cnc.PressToContinue
-    distance[0] += 400
-    distance[1] &= $FFF
-    distance[1]++
-    distance[1]++
-    distance[1] &= 7
-    Pst.str(string(11, 13, "Driving "))
+    'Cnc.PressToContinue
+    LifeGeneration
+    SerialDisplay
+    RotateDisplayTiles(bufferAddress, @lifeArray)
+    'Cnc.FitBitmap(bufferAddress, 128, 64, @lifeArray, 128, 64, 0, 0, 0, 0)
+    Cnc.UpdateDisplay
+    {Pst.str(string(11, 13, "Driving "))
     Pst.str(Header.FindString(Cnc.GetAxisText, 0))
     Pst.str(string(" motor with radius "))
     Pst.Dec(distance[0])
     Pst.str(string(" steps and starting in octant # "))
     Pst.Dec(distance[1])
-    Pst.str(string("."))
-    'Motor.MoveSingle(axisIndex, result)
-    'Motor.MoveLine(0, 1, distance[0], distance[1])
-    Motor.MoveCircle(distance[0], distance[1], 8)
-    'axisIndex++
-    'if axisIndex > 2
-     ' axisIndex := 0
+    Pst.str(string(".")) }
+       
+
+PUB RotateDisplayTiles(destination, source)
+
+  repeat 256 '1024 ' result from 0 to 1023
+    repeat result from 3 to 0
+      RotateBitmap8x8(destination++, source + result)
+    source += 4
+    
+PUB RotateBitmap8x8(destination, source) | temp[2], scratch[2], rowOld, rowNew, colOld, colNew, testResult, testBit, bitOfInterest
+'' This method rotates the bits in eight bytes
+'' located at "source" and places the rotated bytes
+'' in "destination".
+'' "source" and "destination" may be the same
+'' location.
+'' The rotation is 90 degrees clockwise
+
+  'Pst.Str(string(13, " RotateCharacter"))
+    
+  longfill(@temp, 0, 2)
+  bytemove(@scratch, source, 8) 
+  repeat rowNew from 0 to 7
+    bitOfInterest := 7 - rowNew
+    repeat rowOld from 0 to 7
+      dirb[7..0] := byte[@scratch][rowOld]
+      outb[rowOld] := dirb[bitOfInterest]
+    byte[@temp][rowNew] := outb
+    'Pst.Str(string(13, " %"))
+    'Pst.Bin(byte[@temp][rowNew], LINES_IN_ARRAY)
+              
+  bytemove(destination, @temp, 8)
+
+PUB SerialDisplay | temp, mark, space, bit
+  mark  := $2A
+  space := $20 
+   
+  pst.home
+  'Pst.Chars($0d,5) 
+  repeat temp from 0 to 48 'MAX_DISPLAY_INDEX
+    ifnot temp // LONGS_PER_LINE
+      Pst.Clearend
+      Pst.Char($0d)
+    if temp // LONGS_PER_LINE > 96
+      next  
+    bit := lifeArray[temp]
+    repeat 32
+      if (bit <-= 1) & 1
+        Pst.Char(mark)
+      else
+        Pst.Char(space)
+  {Pst.Clearend
+  Pst.Char($0d)
+  pst.str(string("g_loop_wait = "))
+  pst.dec(g_loop_wait)
+  Pst.Clearend
+  Pst.Char($0d)
+  pst.str(string("g_life_wait = "))
+  pst.dec(g_life_wait)
+  Pst.Clearend
+  Pst.Char($0d)
+  pst.str(string("g_frame_wait = "))
+  pst.dec(g_frame_wait) }
+  Pst.Clearend
+
+  
+  
+  Pst.Char($0d)
+  Pst.Clearbelow
+
+CON
+
+'reduced display for testing
+  {PIXELS_PER_LINE = 64
+  LINES_IN_DISPLAY = 32 '}
+
+'un comment for 96x96 pixels
+'' "PIXELS_PER_LINE" needs to be a multiple of 32
+  PIXELS_PER_LINE = 128      'pixels per line 
+  LINES_IN_DISPLAY = 96              'lines in a display }
+        
+
+'un comment for 128x128 pixels
+  {PIXELS_PER_LINE = 128              'pixels per line
+  LINES_IN_DISPLAY = 128              'lines in a display }
+  
+'calculated constants  
+
+  LONGS_PER_LINE = PIXELS_PER_LINE / 32         '#number of longs in a line.  Assumes PIXELS_PER_LINE is divisable by 32
+  MAX_LONG_INDEX = LONGS_PER_LINE - 1
+  
+  LONGS_IN_DISPLAY = LONGS_PER_LINE * LINES_IN_DISPLAY
+  MAX_DISPLAY_INDEX = LONGS_IN_DISPLAY - 1
+  
+  MSB_MASK = |< 31               'just the MSB set
+
+VAR
+
+  long  boarderConditionStart[LONGS_PER_LINE]           'long to store boundary conditions
+  long  lifeArray[LONGS_IN_DISPLAY]          '32x32 bit celular automata array
+  long  boarderConditionEnd[LONGS_PER_LINE]             'long to store boundary conditions
+  long  northWest[LONGS_PER_LINE]                      'direction longs used in array update calculations
+  long  northCenter[LONGS_PER_LINE]             'northWest northCenter  northEast
+  long  northEast[LONGS_PER_LINE]               'midWest   midCenter    midEast
+  long  midWest[LONGS_PER_LINE]                 'southWest southCenter  southEast
+  long  midEast[LONGS_PER_LINE]
+  long  southWest[LONGS_PER_LINE]
+  long  southCenter[LONGS_PER_LINE]
+  long  southEast[LONGS_PER_LINE]
+  long  midCenter[LONGS_PER_LINE]                      'space for center, at the end because it's not added to the parallel counter
+  long  parallelCounter[3]                     'one component of a 3x32-bit parallel counter
+  long  carry[2]                 'carry variables for parallel counter
+
+
+PUB LifeGeneration | index, temp, row, col, temp2, rowPtr, maxIndex
+''calculate the next generation of the lifeArray
+''use a row by row boolean algebra solution with torroidal edges
+'' ToDo: get rid of multiplication in the array indexing
+'' ToDo: Make assembly bitmap drawing container object
+'' ToDo: translate the life solver into assembly.
+'' ToDo: make a census call in the graphics cog. ala http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
+
+
+  'initialise row index
+  row := 0
+  maxIndex := MAX_LONG_INDEX
+  'fill boundary condition variables.
+  'longmove(@boarderConditionEnd,@lifeArray,2)
+  'longmove(@boarderConditionStart,@lifeArray + 4*(LONGS_IN_DISPLAY - LONGS_PER_LINE),2)
+  repeat index from 0 to MAX_LONG_INDEX
+    boarderConditionEnd[index] := lifeArray[index]
+    boarderConditionStart[index] := lifeArray[index + LONGS_IN_DISPLAY - LONGS_PER_LINE]
+
+  'serial_life_dis(@lifeArray,LONGS_PER_LINE*5)
+  'serial_life_dis(@boarderConditionStart,LONGS_PER_LINE)
+  'serial_life_dis(@boarderConditionEnd,LONGS_PER_LINE)
+  'Pst.Charin  
+  
+  'initial fill of direction variables (complicated by lack of flag access in spin)
+  'northWest n  ne   (row-1)
+  'w  center e    (row)
+  'sw w  se   (row + 1)
+  'northWest := boarderConditionStart -> 1
+  repeat index from 0 to MAX_LONG_INDEX
+    northWest[index] := boarderConditionStart[index] >> 1
+    if (index-1) < 0
+      northWest[index] |= (boarderConditionStart[MAX_LONG_INDEX] & 1) -> 1
+    else
+      northWest[index] |= (boarderConditionStart[index-1] & 1) -> 1  
+  'n  := boarderConditionStart
+  repeat index from 0 to MAX_LONG_INDEX
+    northCenter[index] := boarderConditionStart[index]
+  'ne := boarderConditionStart <- 1
+  repeat index from 0 to MAX_LONG_INDEX
+    northEast[index] := boarderConditionStart[index] << 1
+    if (index + 1) => LONGS_PER_LINE
+      northEast[index] |= (boarderConditionStart[0] & MSB_MASK) <- 1
+    else
+      northEast[index] |= (boarderConditionStart[index + 1] & MSB_MASK) <- 1
+  
+  
+  'w  := lifeArray[0] -> 1
+  repeat index from 0 to MAX_LONG_INDEX
+    midWest[index] := lifeArray[index] >> 1
+    if (index-1) < 0
+      midWest[index] |= (lifeArray[MAX_LONG_INDEX] & 1) -> 1
+    else
+      midWest[index] |= (lifeArray[index-1] & 1) -> 1 
+  'center := lifeArray[0]
+  repeat index from 0 to MAX_LONG_INDEX
+    midCenter[index] := lifeArray[index]
+  'e  := lifeArray[0] <- 1
+  repeat index from 0 to MAX_LONG_INDEX
+    midEast[index] := lifeArray[index] << 1
+    if (index + 1) => LONGS_PER_LINE
+      midEast[index] |= (lifeArray[0] & MSB_MASK) <- 1
+    else
+      midEast[index] |= (lifeArray[index + 1] & MSB_MASK) <- 1
+
+
+  'sw := lifeArray[1] -> 1
+  repeat index from 0 to MAX_LONG_INDEX
+    southWest[index] := lifeArray[LONGS_PER_LINE + index] >> 1
+    if (index-1) < 0
+      southWest[index] |= (lifeArray[LONGS_PER_LINE + MAX_LONG_INDEX] & 1) -> 1
+    else
+      southWest[index] |= (lifeArray[LONGS_PER_LINE + index-1] & 1) -> 1 
+  's  := lifeArray[1]
+  repeat index from 0 to MAX_LONG_INDEX
+    southCenter[index] := lifeArray[LONGS_PER_LINE + index]
+  'se := lifeArray[1] <- 1
+  repeat index from 0 to MAX_LONG_INDEX
+    southEast[index] := lifeArray[LONGS_PER_LINE + index] << 1
+    if (index + 1) => LONGS_PER_LINE
+      southEast[index] |= (lifeArray[LONGS_PER_LINE + 0] & MSB_MASK) <- 1
+    else
+      southEast[index] |= (lifeArray[LONGS_PER_LINE + index + 1] & MSB_MASK) <- 1
+
+
+  'serial_life_dis(@northWest, LONGS_PER_LINE*9) 'display initial line buffers
+  'Pst.Charin                    'wait for any key
+
+  rowPtr := @lifeArray
+  repeat
+    repeat col from 0 to MAX_LONG_INDEX 
+      'count the number of neighbors for each cell one row at a time with a 3-bit x 32 parallel counter.
+      'uses direction and counter variables only.
+      parallelCounter[1] := parallelCounter[2] :=  0                'clear counting variables.
+      's_1 := northWest[col]                      'preload first position to count
+      parallelCounter[0] := long[@northWest + col<<2]
+      temp2 := @northCenter + col<<2
+      repeat index from 0 to 6
+        temp := long[temp2]
+        'temp := long[@n][index*LONGS_PER_LINE+col]
+        carry[0] := temp & parallelCounter[0]
+        parallelCounter[0] ^= temp
+        carry[1] := carry[0] & parallelCounter[1]
+        parallelCounter[1] ^= carry[0]
+        parallelCounter[2] ^= carry[1]
+        temp2 += constant(LONGS_PER_LINE*4)
+       
+      'calculate the population of the next generation of this row and write it back to the lifeArray
+      'lifeArray[row*LONGS_PER_LINE + col] := parallelCounter[1] & !parallelCounter[2] & (parallelCounter[0] | center[col])
+      temp2 := rowPtr + col << 2
+      long[temp2] := parallelCounter[1] & !parallelCounter[2] & (parallelCounter[0] | long[@midCenter + col<<2])
       
+       
+    'shift to next row or exit if done
+    row := row + 1
+    rowPtr += LONGS_PER_LINE << 2
+    if row => LINES_IN_DISPLAY                  'if row is past the end of the array
+      quit                        'jump out of the loop
+    repeat col from 0 to MAX_LONG_INDEX
+      northWest[col] := midWest[col]
+      northCenter[col]  := midCenter[col]
+      northEast[col] := midEast[col]
+      midWest[col]  := southWest[col]
+      midCenter[col] := southCenter[col]
+      midEast[col]  := southEast[col]
+      
+    'sw := lifeArray[row + 1] -> 1
+    repeat index from 0 to MAX_LONG_INDEX
+      southWest[index] := lifeArray[(row + 1) * LONGS_PER_LINE + index] >> 1
+      if (index-1) < 0
+        southWest[index] |= (lifeArray[(row + 1) * LONGS_PER_LINE + MAX_LONG_INDEX] & 1) -> 1
+      else
+        southWest[index] |= (lifeArray[(row + 1) * LONGS_PER_LINE + index-1] & 1) -> 1 
+    's  := lifeArray[row + 1]
+    repeat index from 0 to MAX_LONG_INDEX
+      southCenter[index] := lifeArray[(row + 1) * LONGS_PER_LINE + index]
+    'se := lifeArray[row + 1] <- 1
+    repeat index from 0 to MAX_LONG_INDEX
+      southEast[index] := lifeArray[(row + 1) * LONGS_PER_LINE + index] << 1
+      if (index + 1) => LONGS_PER_LINE
+        southEast[index] |= (lifeArray[(row + 1) * LONGS_PER_LINE + 0] & MSB_MASK) <- 1
+      else
+        southEast[index] |= (lifeArray[(row + 1) * LONGS_PER_LINE + index + 1] & MSB_MASK) <- 1
+
+          
 {PUB ReturnToTop
 
   programState := Header#TRANSITIONING_PROGRAM

@@ -1345,7 +1345,7 @@ PUB OrBytes(destPtr, sourcePtr, size, fromSdFlag)
       result := byte[sourcePtr++]
     byte[destPtr++] |= result
     
-PRI UpdateDisplay '| frozenFlag
+PUB UpdateDisplay '| frozenFlag
 '' Keep track of which areas are buffer are inverted and uninvert before these areas
 '' are changed.
 '' When this program is called, there shouldn't be any inverted areas.
@@ -1419,7 +1419,7 @@ PRI InvertArea(topLeftX, topLeftY, bottomRightX, bottomRightY) | targetPtr, {top
 '' destWidth, destHeight, sourceWidth and sourceHeight in pixels
 
   
-  bufferAddress := Spi.getBuffer
+  bufferAddress := Spi.GetBuffer
 
   topLeftX #>= Header#MIN_OLED_X
   topLeftY #>= Header#MIN_OLED_Y
@@ -2244,6 +2244,10 @@ PUB Get165Address
 PUB GetAxisText
 
   result := @axesText
+  
+PUB GetOledBuffer
+
+  result := Spi.GetBuffer
   
 PUB SetSleepDrv8711(sleepAxis, state)
 

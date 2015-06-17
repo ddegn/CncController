@@ -760,17 +760,17 @@ DAT                     org
 entry                   or      dira, stepMask
 maxDelayCog             andn    outa, stepMask
 
-minDelayCog             mov     mailboxAddr, par
+accelStepsF             mov     mailboxAddr, par
 
                         'mov     byteCount, #4    
 delayChangeCog          add     mailboxAddr, #4   ' ** convert to loop
 
-doubleAccel             mov     stepCountdown, #42 ' pointers to initialize
+doubleAccel             mov     accelStepsF, #42 ' pointers to initialize
 accelIntervalCog        mov     maxDelayAddr, mailboxAddr
 accelIntervalsCog       add     maxDelayAddr, #4
-accelStepsF             add     accelIntervalCog, destAndSourceIncrement ' increment pointers
+minDelayCog             add     accelIntervalCog, destAndSourceIncrement ' increment pointers
 accelStepsS             add     accelIntervalsCog, destinationIncrement
-decelStepsF             djnz    stepCountdown, #accelIntervalCog
+decelStepsF             djnz    accelStepsF, #accelIntervalCog
                        
 'decelStepsS             nop 'mov     accelIntervalAddr, delayChangeAddr
 fullStepsF              nop 'add     accelIntervalAddr, #4
@@ -937,7 +937,7 @@ DAT pasmCircle          rdlong  resultPtr, mailboxAddr
                         
 setupAccelC             neg     activeChange, delayChangeCog  ' add a negative number to accel
                         
-                        mov     stepCountdown, accelStepsF
+                        'mov     stepCountdown, accelStepsF
                         wrlong  con333, debugLocationClueFPtr
                         wrlong  con100, debugLocationCluePtr
                         'mov     lastHalfStepTime, octantCog ' "lastHalfStepTime" is temp variable
@@ -1116,7 +1116,9 @@ stepFastLowC_debug      add     fastLowCount, #1
 '------------------------------------------------------------------------------
 '------------------------------------------------------------------------------
 '** akward
-countdownStepsC         djnz    stepCountdown, #countdownStepsC_ret
+countdownStepsC         djnz    accelStepsF, #countdownStepsC_ret
+                        'djnz    stepCountdown, #countdownStepsC_ret
+
                         mov     activeChange, zero
                         mov     activeChangeS, zero
                         'mov     stepCountdown, fullStepsF '** add decel section later
@@ -1643,7 +1645,7 @@ minDelayCogS            long 0-0
 accelStage              long 0-0
 'negativeChange          long 0-0
 delayChangeCogS         long 0-0
-stepCountdown           long 0-0
+'stepCountdown          long 0-0
 radiusCog               long 0-0
 octantCog               long 0-0
 octantCountdown         long 0-0
