@@ -92,8 +92,8 @@ OBJ
    
 PUB Setup(parameter0, parameter1) '| cncCog
 
-  configPtr := Header.GetConfigName
-  fileNamePtr := Header.GetFileName
+  'configPtr := Header.GetConfigName
+  'fileNamePtr := Header.GetFileName
   Pst.Start(115_200)
  
   'cognew(OledDemo, @stack)
